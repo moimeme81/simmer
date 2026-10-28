@@ -13,7 +13,7 @@
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/moimeme81/simmer/main/unraid/simmer.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/moimeme81/simmer/main/public/icon.svg</Icon>
-  <ExtraParams/>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
@@ -24,6 +24,9 @@
   <Config Name="Recipes (appdata)" Target="/data" Default="/mnt/user/appdata/simmer" Mode="rw" Description="Where saved recipes are stored" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/simmer</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID the app runs as (Unraid: 99 = nobody)" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID the app runs as (Unraid: 100 = users)" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="Auto update" Target="AUTO_UPDATE" Default="true" Mode="" Description="Check your GitHub repo daily and update Simmer by itself (no Docker registry needed). Set to false to turn off." Type="Variable" Display="always" Required="false" Mask="false">true</Config>
+  <Config Name="Update repo" Target="UPDATE_REPO" Default="moimeme81/simmer" Mode="" Description="GitHub repo (owner/name) to take updates from." Type="Variable" Display="advanced" Required="false" Mask="false">moimeme81/simmer</Config>
+  <Config Name="GitHub token" Target="GITHUB_TOKEN" Default="" Mode="" Description="Only needed if the repo is private (read access)." Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Optional. Enables AI extraction for pages without recipe markup." Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="AI Model" Target="LLM_MODEL" Default="claude-haiku-5-5" Mode="" Description="Optional. Model used for AI extraction." Type="Variable" Display="advanced" Required="false" Mask="false">claude-haiku-5-5</Config>
   <Config Name="Basic Auth User" Target="AUTH_USER" Default="" Mode="" Description="Optional. Set both user and password to require a login." Type="Variable" Display="advanced" Required="false" Mask="false"/>

@@ -45,6 +45,7 @@ ul.ing input:checked+span{text-decoration:line-through;color:var(--mute)}
 ol.steps{padding-left:22px;margin:0}ol.steps li{margin-bottom:14px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
 textarea{width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+footer{max-width:1000px;margin:0 auto;padding:8px 16px 40px;color:var(--mute);font-size:13px}footer button{padding:3px 10px;font-size:13px;margin-left:6px}
 /* cook mode */
 #cook{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;padding:20px;z-index:10}
 #cook.on{display:flex}
@@ -55,6 +56,7 @@ textarea{width:100%;min-height:90px;padding:10px;border:1px solid var(--line);bo
 <body>
 <header><a href="#/">🍲 Simmer</a><nav><a href="#/">Recipes</a><a href="#/lists">Lists</a><a href="#/import">Import</a></nav></header>
 <main id="app"></main>
+<footer id="foot"></footer>
 <div id="cook"></div>
 <script>
 const $ = (s, r = document) => r.querySelector(s);
@@ -189,6 +191,23 @@ async function importView() {
   };
 }
 
+async function footer() {
+  const el = $('#foot');
+  try {
+    const u = await api('/api/update/status');
+    const v = u.current && u.current !== 'bundled' ? u.current.slice(0, 7) : 'built-in';
+    if (!u.enabled) { el.innerHTML = `Simmer ${esc(v)} · auto-update off`; return; }
+    const msg = u.state === 'checking' ? 'checking…' : u.state === 'updated' ? 'updated, restarting…' : esc(u.message || '');
+    el.innerHTML = `Simmer ${esc(v)} · auto-update on${msg ? ' · ' + msg : ''}<button id="chk">Check now</button>`;
+    $('#chk').onclick = async () => {
+      $('#chk').disabled = true;
+      try { await api('/api/update/check', { method: 'POST', body: {} }); } catch (x) { el.textContent = x.message; return; }
+      setTimeout(footer, 2500);
+      setTimeout(() => location.reload(), 9000);
+    };
+  } catch { el.textContent = ''; }
+}
+
 let wake;
 async function cook(steps) {
   let i = 0; const el = $('#cook'); el.classList.add('on');
@@ -204,7 +223,7 @@ async function cook(steps) {
 }
 
 const route = () => { clearInterval(listTimer); clearInterval(importTimer); const m = location.hash.match(/^#\/r\/([\w-]+)/); (location.hash.startsWith('#/lists') ? listsView() : location.hash.startsWith('#/import') ? importView() : m ? recipe(m[1]) : home()).catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`)); };
-addEventListener('hashchange', route); route();
+addEventListener('hashchange', route); route(); footer();
 </script>
 </body>
 </html>

@@ -127,6 +127,19 @@ app.post('/api/import/anylist', (req, res) => {
 });
 app.get('/api/import/anylist/status', (_req, res) => res.json(anylistJob.status()));
 
+/* ---------- self-update (see launcher.js) ---------- */
+app.get('/api/update/status', (_req, res) => {
+  let st = {};
+  try { st = JSON.parse(require('node:fs').readFileSync(path.join(cfg.dataDir, 'update-status.json'), 'utf8')); } catch { /* launcher not running (dev) */ }
+  res.json({ enabled: process.env.AUTO_UPDATE === 'true' && !!process.env.SIMMER_LAUNCHER_PID, ...st });
+});
+app.post('/api/update/check', (_req, res) => {
+  const pid = +process.env.SIMMER_LAUNCHER_PID;
+  if (process.env.AUTO_UPDATE !== 'true' || !pid) return res.status(400).json({ error: 'Auto-update is off. Set AUTO_UPDATE to true on the container.' });
+  process.kill(pid, 'SIGUSR1');
+  res.status(202).json({ started: true });
+});
+
 /* ---------- shopping lists ---------- */
 app.get('/api/lists', (_req, res) => res.json(lists.all()));
 app.post('/api/lists', (req, res) => {
