@@ -213,4 +213,4 @@ async function extractRecipe(url, cfg) {
   return { ...recipe, sourceUrl: finalUrl, host: new URL(finalUrl).hostname.replace(/^www\./, '') };
 }
 
-module.exports = { extractRecipe, fromJsonLd, parseDuration, isPrivateIp };
+module.exports = { extractRecipe, fromJsonLd, parseDuration, isPrivateIp, assertPublic };

@@ -35,17 +35,17 @@ docker compose up -d --build
 | `ALLOW_PRIVATE_URLS` | false | Allow importing from LAN addresses |
 
 ## Moving over from AnyList
-AnyList has no export button or public API, so `tools/anylist-export` uses the unofficial
-[`anylist`](https://www.npmjs.com/package/anylist) client to read your account and push it into Simmer.
-It runs on **your computer**, so your AnyList password never reaches the server.
+Open Simmer → **Import**, enter your AnyList email and password, and click **Start import**. Recipes (with photo, notes,
+rating, times, source) and shopping lists are copied, with a live progress bar. Your login is used only for that import and is never
+saved. It is safe to run again: items are matched by their AnyList id and updated, not duplicated.
 
-```
-cd tools/anylist-export && npm install
-ANYLIST_EMAIL=you@example.com ANYLIST_PASSWORD='…' \
-  node export.js --to http://UNRAID-IP:3000 --backup anylist-backup.json
-```
-Add `--user`/`--pass` if you enabled basic auth, or `--dry-run` to only fetch and write the backup.
-Recipes (with photo, notes, rating, times, source) and shopping lists are copied. It is safe to re-run:
-items are matched by their AnyList id and updated, not duplicated.
+AnyList has no public API or export button, so this uses the unofficial [`anylist`](https://www.npmjs.com/package/anylist)
+client and could break if AnyList changes its sign-in. Not copied: meal plan calendar, recipe collections/tags, list categories.
 
-Not copied yet: meal plan calendar, recipe collections/tags, list categories.
+Prefer the command line? `tools/anylist-export` does the same from your own computer and pushes to Simmer over HTTP.
+
+## Updating on Unraid
+1. Run the build command again (it always builds the latest `main`):
+   `curl -fsSL https://raw.githubusercontent.com/moimeme81/simmer/main/unraid/build.sh | sh`
+2. Docker tab → Simmer → **Edit** → **Apply** (this recreates the container on the new image).
+Your recipes and lists live in `/mnt/user/appdata/simmer` and are untouched.

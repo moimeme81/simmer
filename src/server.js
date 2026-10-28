@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const express = require('express');
 const { extractRecipe } = require('./extract');
 const { Store, ListStore } = require('./store');
+const { AnyListImport } = require('./anylist');
 
 const cfg = {
   port: +process.env.PORT || 3000,
@@ -68,16 +69,16 @@ app.post('/api/import', async (req, res) => {
 });
 
 /**
- * Bulk import of one recipe from another app (used by tools/anylist-export).
- * Idempotent: a recipe with the same externalId is updated, not duplicated.
+ * Create or update one recipe imported from another app. Idempotent: a recipe with the
+ * same externalId is updated, not duplicated. Used by the bulk endpoint and the AnyList job.
  */
-app.post('/api/import/bulk/recipe', (req, res) => {
-  const b = req.body || {};
+function upsertImported(b, photoBuf) {
   const title = str(b.title, 300).trim();
   const ingredients = strArr(b.ingredients);
   const steps = strArr(b.steps);
-  if (!title || (!ingredients.length && !steps.length)) return res.status(400).json({ error: 'Recipe needs a title and ingredients or steps' });
+  if (!title || (!ingredients.length && !steps.length)) throw Object.assign(new Error('Recipe needs a title and ingredients or steps'), { status: 400 });
   const num = (v) => (Number.isFinite(+v) && +v > 0 ? Math.round(+v) : null);
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
   const base = {
     title, description: '', author: null,
     yield: b.yield ? str(b.yield, 100) : null,
@@ -85,18 +86,23 @@ app.post('/api/import/bulk/recipe', (req, res) => {
     ingredients, steps, notes: str(b.notes, 10000),
     rating: num(b.rating) ? Math.min(5, num(b.rating)) : null,
     sourceUrl: /^https?:\/\//.test(b.sourceUrl || '') ? str(b.sourceUrl, 2000) : null,
-    host: str(b.sourceName || (b.sourceUrl ? new URL(b.sourceUrl).hostname.replace(/^www\./, '') : '') || 'Imported', 200),
+    host: str(b.sourceName || hostOf(b.sourceUrl || '') || 'Imported', 200),
     method: str(b.importedFrom || 'import', 40),
     externalId: b.externalId ? str(b.externalId, 100) : undefined,
   };
   const existing = base.externalId && store.findByExternal(base.externalId);
   let rec = existing ? { ...existing, ...base, id: existing.id, savedAt: existing.savedAt } : store.create({ ...base, image: null });
   if (existing) store.write(rec);
-  if (b.photoBase64) {
-    const img = store.saveImage(rec.id, Buffer.from(String(b.photoBase64), 'base64'));
+  if (photoBuf?.length) {
+    const img = store.saveImage(rec.id, photoBuf);
     if (img) { rec = { ...rec, image: img }; store.write(rec); }
   }
-  res.json({ id: rec.id, updated: !!existing, image: !!rec.image });
+  return { id: rec.id, updated: !!existing, image: !!rec.image };
+}
+
+app.post('/api/import/bulk/recipe', (req, res) => {
+  const b = req.body || {};
+  res.json(upsertImported(b, b.photoBase64 ? Buffer.from(String(b.photoBase64), 'base64') : null));
 });
 
 app.post('/api/import/bulk/list', (req, res) => {
@@ -105,6 +111,21 @@ app.post('/api/import/bulk/list', (req, res) => {
   const l = lists.importList({ externalId: b.externalId ? str(b.externalId, 100) : undefined, name: str(b.name, 80), items: Array.isArray(b.items) ? b.items.slice(0, 5000) : [] });
   res.json({ id: l.id, items: l.items.length });
 });
+
+/* ---------- AnyList import from the web UI ---------- */
+const anylistJob = new AnyListImport({
+  upsertRecipe: upsertImported,
+  importList: (l) => lists.importList(l),
+  allowPrivate: cfg.allowPrivate,
+});
+app.post('/api/import/anylist', (req, res) => {
+  const email = str(req.body?.email, 200).trim();
+  const password = str(req.body?.password, 500);
+  if (!email || !password) return res.status(400).json({ error: 'Enter your AnyList email and password' });
+  anylistJob.start(email, password); // throws 409 if one is already running
+  res.status(202).json({ started: true });
+});
+app.get('/api/import/anylist/status', (_req, res) => res.json(anylistJob.status()));
 
 /* ---------- shopping lists ---------- */
 app.get('/api/lists', (_req, res) => res.json(lists.all()));

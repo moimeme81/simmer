@@ -13,6 +13,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-ap
 header{display:flex;align-items:center;gap:12px;max-width:1000px;margin:0 auto;padding:16px}
 header a{font-weight:700;font-size:20px;color:var(--ink);text-decoration:none}
 header nav{display:flex;gap:16px;margin-left:12px}header nav a{font-size:16px;font-weight:500;color:var(--mute)}
+.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:12px 0}.bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:520px}.panel label{display:block;margin:10px 0 4px;font-size:14px;color:var(--mute)}.panel input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.tabs button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 ul.items{list-style:none;padding:0;margin:0}ul.items li{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
 ul.items li.done span.n{text-decoration:line-through;color:var(--mute)}ul.items .n{flex:1}ul.items small{color:var(--mute);display:block}
@@ -51,7 +53,7 @@ textarea{width:100%;min-height:90px;padding:10px;border:1px solid var(--line);bo
 </style>
 </head>
 <body>
-<header><a href="#/">🍲 Simmer</a><nav><a href="#/">Recipes</a><a href="#/lists">Lists</a></nav></header>
+<header><a href="#/">🍲 Simmer</a><nav><a href="#/">Recipes</a><a href="#/lists">Lists</a><a href="#/import">Import</a></nav></header>
 <main id="app"></main>
 <div id="cook"></div>
 <script>
@@ -145,6 +147,48 @@ async function listsView(selected) {
   }, 5000);
 }
 
+let importTimer;
+async function importView() {
+  clearInterval(importTimer);
+  app.innerHTML = `
+    <h1>Import</h1>
+    <div class="panel">
+      <h2 style="margin-top:0">From AnyList</h2>
+      <p style="color:var(--mute);margin:0 0 8px">Copies your recipes (with photos) and shopping lists into Simmer. Safe to run again: nothing is duplicated.
+      Your login is sent only to this Simmer server, used for this import, and never saved.</p>
+      <form id="al">
+        <label>AnyList email</label><input type="email" name="email" required autocomplete="off">
+        <label>AnyList password</label><input type="password" name="password" required autocomplete="off">
+        <div class="actions"><button class="primary" id="go">Start import</button></div>
+      </form>
+      <div id="prog" hidden></div>
+    </div>
+    <p style="color:var(--mute);max-width:520px">Uses an unofficial connection to AnyList, which has no public export. Meal plans, recipe collections and list categories are not copied.</p>`;
+  const prog = $('#prog'), form = $('#al'), go = $('#go');
+  const draw = (st) => {
+    if (st.state === 'idle') return;
+    form.hidden = st.state === 'running';
+    prog.hidden = false;
+    const pct = st.total ? Math.round(((st.done + st.failed + (st.skipped || 0)) / st.total) * 100) : 0;
+    const label = { login: 'Signing in to AnyList…', fetching: 'Reading your account…', recipes: `Importing recipes ${st.done + st.failed + (st.skipped || 0)} of ${st.total}`, lists: 'Importing shopping lists…', done: 'Finished' }[st.phase] || '';
+    if (st.state === 'error') prog.innerHTML = `<p class="err" style="margin:12px 0 0">${esc(st.error)}</p>`;
+    else prog.innerHTML = `<p style="margin:12px 0 0"><b>${esc(label)}</b></p><div class="bar"><i style="width:${st.state === 'done' ? 100 : pct}%"></i></div>
+      <p style="margin:0;color:var(--mute)">${st.done} recipes imported · ${st.photos} photos · ${st.lists || 0} lists${st.failed ? ` · ${st.failed} failed` : ''}${st.skipped ? ` · ${st.skipped} empty skipped` : ''}</p>
+      ${(st.errors || []).length ? `<ul style="color:#c0392b;font-size:14px">${st.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+      ${st.state === 'done' ? '<div class="actions"><a href="#/"><button class="primary" type="button">View recipes</button></a></div>' : ''}`;
+    if (st.state !== 'running') { clearInterval(importTimer); go.disabled = false; if (st.state === 'error') form.hidden = false; }
+  };
+  const poll = async () => { try { draw(await api('/api/import/anylist/status')); } catch {} };
+  const st = await api('/api/import/anylist/status');
+  if (st.state === 'running') { draw(st); importTimer = setInterval(poll, 1000); }
+  form.onsubmit = async (e) => {
+    e.preventDefault(); go.disabled = true;
+    const f = new FormData(form);
+    try { await api('/api/import/anylist', { method: 'POST', body: { email: f.get('email'), password: f.get('password') } }); form.reset(); prog.hidden = false; prog.innerHTML = '<p>Starting…</p>'; form.hidden = true; importTimer = setInterval(poll, 1000); poll(); }
+    catch (x) { prog.hidden = false; prog.innerHTML = `<p class="err" style="margin:12px 0 0">${esc(x.message)}</p>`; go.disabled = false; }
+  };
+}
+
 let wake;
 async function cook(steps) {
   let i = 0; const el = $('#cook'); el.classList.add('on');
@@ -159,7 +203,7 @@ async function cook(steps) {
   document.addEventListener('keydown', key); draw();
 }
 
-const route = () => { clearInterval(listTimer); const m = location.hash.match(/^#\/r\/([\w-]+)/); (location.hash.startsWith('#/lists') ? listsView() : m ? recipe(m[1]) : home()).catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`)); };
+const route = () => { clearInterval(listTimer); clearInterval(importTimer); const m = location.hash.match(/^#\/r\/([\w-]+)/); (location.hash.startsWith('#/lists') ? listsView() : location.hash.startsWith('#/import') ? importView() : m ? recipe(m[1]) : home()).catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`)); };
 addEventListener('hashchange', route); route();
 </script>
 </body>
