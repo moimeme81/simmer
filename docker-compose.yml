@@ -1,0 +1,16 @@
+services:
+  simmer:
+    image: moimeme81/simmer:latest
+    build: .
+    container_name: simmer
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PUID: "99"
+      PGID: "100"
+      # ANTHROPIC_API_KEY: ""      # optional: AI extraction for pages/videos without recipe markup
+      # AUTH_USER: ""              # optional basic auth
+      # AUTH_PASS: ""
+    volumes:
+      - ./data:/data

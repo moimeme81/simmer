@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simmer</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#faf7f2;--card:#fff;--ink:#2b2622;--mute:#7a6f66;--line:#e8e0d5;--accent:#d2552b;--accent-ink:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#171412;--card:#211d1a;--ink:#f1ebe4;--mute:#a1958a;--line:#342e29;--accent:#ef7a4f;--accent-ink:#1a0d07}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:center;gap:12px;max-width:1000px;margin:0 auto;padding:16px}
+header a{font-weight:700;font-size:20px;color:var(--ink);text-decoration:none}
+header nav{display:flex;gap:16px;margin-left:12px}header nav a{font-size:16px;font-weight:500;color:var(--mute)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.tabs button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+ul.items{list-style:none;padding:0;margin:0}ul.items li{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
+ul.items li.done span.n{text-decoration:line-through;color:var(--mute)}ul.items .n{flex:1}ul.items small{color:var(--mute);display:block}
+ul.items input[type=checkbox]{width:22px;height:22px}ul.items .x{border:0;background:none;color:var(--mute);padding:4px 8px}
+main{max-width:1000px;margin:0 auto;padding:0 16px 64px}
+form.import{display:flex;gap:8px;margin:8px 0 24px}
+input,textarea,button{font:inherit;color:inherit}
+input[type=url]{flex:1;min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 16px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.6;cursor:wait}
+.err{color:#c0392b;margin:-12px 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;text-decoration:none;color:inherit;display:block}
+.card .img{aspect-ratio:4/3;background:var(--line) center/cover}
+.card .t{padding:12px 14px}.card .t b{display:block;line-height:1.3}.card .t small{color:var(--mute)}
+.empty{color:var(--mute);text-align:center;padding:48px 0}
+.hero{width:100%;max-height:340px;object-fit:cover;border-radius:14px}
+h1{margin:16px 0 4px;font-size:28px;line-height:1.2}
+.meta{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--mute);margin:8px 0 16px;font-size:14px}
+.cols{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:32px}
+@media(max-width:760px){.cols{grid-template-columns:1fr;gap:8px}}
+h2{font-size:18px;margin:20px 0 8px}
+ul.ing{list-style:none;padding:0;margin:0}
+ul.ing li{padding:6px 0;border-bottom:1px solid var(--line)}
+ul.ing label{display:flex;gap:10px;cursor:pointer}
+ul.ing input:checked+span{text-decoration:line-through;color:var(--mute)}
+ol.steps{padding-left:22px;margin:0}ol.steps li{margin-bottom:14px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+textarea{width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+/* cook mode */
+#cook{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;padding:20px;z-index:10}
+#cook.on{display:flex}
+#cook .n{color:var(--mute)}#cook .txt{flex:1;display:flex;align-items:center;font-size:clamp(22px,4.5vw,38px);line-height:1.35;overflow:auto}
+#cook .nav{display:flex;gap:12px}#cook .nav button{flex:1;padding:18px;font-size:18px}
+</style>
+</head>
+<body>
+<header><a href="#/">🍲 Simmer</a><nav><a href="#/">Recipes</a><a href="#/lists">Lists</a></nav></header>
+<main id="app"></main>
+<div id="cook"></div>
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api = async (url, opts) => {
+  const r = await fetch(url, opts && { ...opts, headers: { 'content-type': 'application/json' }, body: opts.body && JSON.stringify(opts.body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+};
+const mins = (m) => m ? (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60 ? (m % 60) + ' min' : ''}` : `${m} min`) : null;
+const app = $('#app');
+
+async function home() {
+  app.innerHTML = `
+    <form class="import"><input type="url" required placeholder="Paste a recipe link…" autofocus><button class="primary">Import</button></form>
+    <div class="err" hidden></div><div id="list" class="grid"></div>`;
+  const form = $('form'), err = $('.err');
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('button', form); btn.disabled = true; btn.textContent = 'Importing…'; err.hidden = true;
+    try { const r = await api('/api/import', { method: 'POST', body: { url: $('input', form).value } }); location.hash = '#/r/' + r.id; }
+    catch (x) { err.textContent = x.message; err.hidden = false; btn.disabled = false; btn.textContent = 'Import'; }
+  };
+  const list = await api('/api/recipes');
+  $('#list').outerHTML = list.length
+    ? `<div class="grid">${list.map((r) => `<a class="card" href="#/r/${r.id}"><div class="img" style="${r.image ? `background-image:url('${esc(r.image)}')` : ''}"></div><div class="t"><b>${esc(r.title)}</b><small>${esc(r.host)}</small></div></a>`).join('')}</div>`
+    : `<div class="empty">No recipes yet. Paste a link above to save your first one.</div>`;
+}
+
+async function recipe(id) {
+  const r = await api('/api/recipes/' + id);
+  const meta = [['Prep', mins(r.prepMinutes)], ['Cook', mins(r.cookMinutes)], ['Total', mins(r.totalMinutes)], ['Serves', r.yield]].filter((x) => x[1]);
+  app.innerHTML = `
+    <p><a href="#/">← All recipes</a></p>
+    ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : ''}
+    <h1>${esc(r.title)}</h1>
+    <div class="meta">${meta.map(([k, v]) => `<span><b>${k}</b> ${esc(v)}</span>`).join('')}<span>from ${r.sourceUrl ? `<a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.host)}</a>` : esc(r.host)}</span></div>
+    ${r.description ? `<p>${esc(r.description)}</p>` : ''}
+    <div class="actions"><button class="primary" id="cookBtn">Start cooking</button><button id="toList">Add ingredients to list</button><button id="del">Delete</button></div>
+    <div class="cols">
+      <section><h2>Ingredients</h2><ul class="ing">${r.ingredients.map((i) => `<li><label><input type="checkbox"><span>${esc(i)}</span></label></li>`).join('')}</ul></section>
+      <section><h2>Method</h2><ol class="steps">${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
+        <h2>Notes</h2><textarea id="notes" placeholder="Your notes…">${esc(r.notes)}</textarea></section>
+    </div>`;
+  let t; $('#notes').oninput = (e) => { clearTimeout(t); t = setTimeout(() => api('/api/recipes/' + id, { method: 'PUT', body: { notes: e.target.value } }), 600); };
+  $('#del').onclick = async () => { if (confirm('Delete this recipe?')) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } };
+  $('#cookBtn').onclick = () => cook(r.steps);
+  $('#toList').onclick = async () => {
+    const ls = await api('/api/lists');
+    const checked = [...app.querySelectorAll('ul.ing input')].map((c, n) => (c.checked ? null : r.ingredients[n])).filter(Boolean);
+    let target = ls[0];
+    if (ls.length > 1) { const pick = prompt('Add to which list?\n' + ls.map((l, n) => `${n + 1}. ${l.name}`).join('\n'), '1'); if (!pick) return; target = ls[+pick - 1] || ls[0]; }
+    await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: target.id, ingredients: checked } });
+    const b = $('#toList'); b.textContent = `Added ${checked.length} to ${target.name} ✓`;
+  };
+}
+
+
+let listTimer;
+async function listsView(selected) {
+  clearInterval(listTimer);
+  let all = await api('/api/lists');
+  let cur = all.find((l) => l.id === selected) || all[0];
+  const draw = () => {
+    const open = cur.items.filter((i) => !i.checked), done = cur.items.filter((i) => i.checked);
+    const row = (i) => `<li class="${i.checked ? 'done' : ''}" data-id="${i.id}"><input type="checkbox" ${i.checked ? 'checked' : ''}><span class="n">${esc(i.name)}${i.quantity ? ' · ' + esc(i.quantity) : ''}${i.details ? `<small>${esc(i.details)}</small>` : ''}</span><button class="x" title="Remove">✕</button></li>`;
+    app.innerHTML = `
+      <div class="tabs">${all.map((l) => `<button data-l="${l.id}" class="${l.id === cur.id ? 'on' : ''}">${esc(l.name)}</button>`).join('')}<button id="newList">+ New list</button></div>
+      <form class="import" id="addItem"><input type="text" required placeholder="Add an item…" style="flex:1;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card)"><button class="primary">Add</button></form>
+      <ul class="items">${open.map(row).join('') || '<li class="empty" style="display:block">Nothing to buy.</li>'}</ul>
+      ${done.length ? `<h2>In the cart (${done.length}) <button id="clear" style="margin-left:8px">Clear</button></h2><ul class="items">${done.map(row).join('')}</ul>` : ''}
+      ${all.length > 1 ? '<p><button id="delList">Delete this list</button></p>' : ''}`;
+    app.querySelectorAll('[data-l]').forEach((b) => (b.onclick = () => { cur = all.find((l) => l.id === b.dataset.l); draw(); }));
+    $('#newList').onclick = async () => { const n = prompt('List name?'); if (!n) return; const l = await api('/api/lists', { method: 'POST', body: { name: n } }); all.push({ ...l, items: [] }); cur = all.at(-1); draw(); };
+    $('#addItem').onsubmit = async (e) => { e.preventDefault(); const inp = $('input', e.target); const name = inp.value.trim(); if (!name) return; cur = await api(`/api/lists/${cur.id}/items`, { method: 'POST', body: { name } }); all[all.findIndex((l) => l.id === cur.id)] = cur; draw(); $('#addItem input').focus(); };
+    app.querySelectorAll('ul.items li[data-id]').forEach((li) => {
+      const id = li.dataset.id;
+      $('input', li).onchange = async (e) => { const it = cur.items.find((x) => x.id === id); it.checked = e.target.checked; draw(); await api(`/api/lists/${cur.id}/items/${id}`, { method: 'PATCH', body: { checked: it.checked } }); };
+      $('.x', li).onclick = async () => { cur.items = cur.items.filter((x) => x.id !== id); draw(); await api(`/api/lists/${cur.id}/items/${id}`, { method: 'DELETE' }); };
+    });
+    $('#clear')?.addEventListener('click', async () => { cur = await api(`/api/lists/${cur.id}/clear-checked`, { method: 'POST' }); all[all.findIndex((l) => l.id === cur.id)] = cur; draw(); });
+    $('#delList')?.addEventListener('click', async () => { if (!confirm(`Delete "${cur.name}"?`)) return; await api(`/api/lists/${cur.id}`, { method: 'DELETE' }); all = all.filter((l) => l.id !== cur.id); cur = all[0]; draw(); });
+  };
+  draw();
+  // Light polling so a list edited on another device shows up (skipped while typing).
+  listTimer = setInterval(async () => {
+    if (!location.hash.startsWith('#/lists') || document.activeElement?.tagName === 'INPUT') return;
+    try { const fresh = await api('/api/lists'); if (JSON.stringify(fresh) !== JSON.stringify(all)) { all = fresh; cur = all.find((l) => l.id === cur.id) || all[0]; draw(); } } catch {}
+  }, 5000);
+}
+
+let wake;
+async function cook(steps) {
+  let i = 0; const el = $('#cook'); el.classList.add('on');
+  try { wake = await navigator.wakeLock?.request('screen'); } catch {}
+  const draw = () => {
+    el.innerHTML = `<div class="n">Step ${i + 1} of ${steps.length}</div><div class="txt">${esc(steps[i])}</div>
+      <div class="nav"><button id="p" ${i ? '' : 'disabled'}>Back</button><button id="x">Close</button><button class="primary" id="n" ${i < steps.length - 1 ? '' : 'disabled'}>Next</button></div>`;
+    $('#p', el).onclick = () => { i--; draw(); }; $('#n', el).onclick = () => { i++; draw(); }; $('#x', el).onclick = close;
+  };
+  const close = () => { el.classList.remove('on'); wake?.release(); document.removeEventListener('keydown', key); };
+  const key = (e) => { if (e.key === 'ArrowRight' && i < steps.length - 1) { i++; draw(); } else if (e.key === 'ArrowLeft' && i) { i--; draw(); } else if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', key); draw();
+}
+
+const route = () => { clearInterval(listTimer); const m = location.hash.match(/^#\/r\/([\w-]+)/); (location.hash.startsWith('#/lists') ? listsView() : m ? recipe(m[1]) : home()).catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`)); };
+addEventListener('hashchange', route); route();
+</script>
+</body>
+</html>

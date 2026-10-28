@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Simmer</Name>
+  <Repository>moimeme81/simmer:latest</Repository>
+  <Registry>https://hub.docker.com/r/moimeme81/simmer</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/moimeme81/simmer/issues</Support>
+  <Project>https://github.com/moimeme81/simmer</Project>
+  <Overview>Self-hosted recipe saver. Paste a link and get a clean, ad-free, step-by-step recipe with a cook mode. Works out of the box on any site with standard recipe markup; add an Anthropic API key to also extract recipes from pages and video descriptions without it.</Overview>
+  <Category>Tools: Productivity: HomeAutomation:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/moimeme81/simmer/main/unraid/simmer.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/moimeme81/simmer/main/public/icon.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="3000" Default="3000" Mode="tcp" Description="Port for the web interface" Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Recipes (appdata)" Target="/data" Default="/mnt/user/appdata/simmer" Mode="rw" Description="Where saved recipes are stored" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/simmer</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID the app runs as (Unraid: 99 = nobody)" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID the app runs as (Unraid: 100 = users)" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Optional. Enables AI extraction for pages without recipe markup." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="AI Model" Target="LLM_MODEL" Default="claude-haiku-5-5" Mode="" Description="Optional. Model used for AI extraction." Type="Variable" Display="advanced" Required="false" Mask="false">claude-haiku-5-5</Config>
+  <Config Name="Basic Auth User" Target="AUTH_USER" Default="" Mode="" Description="Optional. Set both user and password to require a login." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Basic Auth Password" Target="AUTH_PASS" Default="" Mode="" Description="Optional." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Allow private URLs" Target="ALLOW_PRIVATE_URLS" Default="false" Mode="" Description="Allow importing from LAN addresses (disabled by default for safety)." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+</Container>
