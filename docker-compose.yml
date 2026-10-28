@@ -1,6 +1,6 @@
 services:
   simmer:
-    image: moimeme81/simmer:latest
+    image: simmer:local
     build: .
     container_name: simmer
     restart: unless-stopped

@@ -1,8 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>Simmer</Name>
-  <Repository>moimeme81/simmer:latest</Repository>
-  <Registry>https://hub.docker.com/r/moimeme81/simmer</Registry>
+  <Repository>simmer:local</Repository>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>

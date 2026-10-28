@@ -9,13 +9,15 @@ numbered steps, notes and a full-screen cook mode (screen stays awake).
 - Data is plain JSON files in `/data`. No database.
 
 ## Install on Unraid
-1. In the GitHub repo add the secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (Settings → Secrets and variables → Actions;
-   the token is a Docker Hub access token with read/write). Each push to `main` then publishes `<username>/simmer:latest`
-   to Docker Hub (Actions tab → "Build and publish image" → Run workflow also works).
-2. Unraid → Docker → Add Container → Template: paste
-   `https://raw.githubusercontent.com/moimeme81/simmer/main/unraid/simmer.xml`
-   (or copy `unraid/simmer.xml` to `/boot/config/plugins/dockerMan/templates-user/`).
-3. Apply. Open `http://SERVER-IP:3000`.
+No Docker Hub or GHCR needed: the image is built on your server from this repo.
+1. In the Unraid web terminal run (public repo):
+   `curl -fsSL https://raw.githubusercontent.com/moimeme81/simmer/main/unraid/build.sh | sh`
+   For a private repo, `export GITHUB_TOKEN=<read token>` first and see the header of `unraid/build.sh`.
+2. Add the container: copy `unraid/simmer.xml` to `/boot/config/plugins/dockerMan/templates-user/my-simmer.xml`,
+   then Docker tab → Add Container → Template: Simmer → Apply. (Or add it by hand: repository `simmer:local`,
+   port 3000, path `/data` → `/mnt/user/appdata/simmer`, `PUID=99`, `PGID=100`.)
+3. Open `http://SERVER-IP:3000`.
+To update: run step 1 again, then edit the Simmer container and click Apply.
 
 ## Docker / Compose
 ```
