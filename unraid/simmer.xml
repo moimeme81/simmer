@@ -12,7 +12,7 @@
   <Category>Tools: Productivity: HomeAutomation:</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/moimeme81/simmer/main/unraid/simmer.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/moimeme81/simmer/main/public/icon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/moimeme81/simmer/main/public/icon-512.png</Icon>
   <ExtraParams>--restart=unless-stopped</ExtraParams>
   <PostArgs/>
   <CPUset/>

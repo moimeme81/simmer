@@ -161,9 +161,9 @@ app.post('/api/lists/:id/clear-checked', (req, res) => { const l = lists.clearCh
 app.post('/api/recipes/:id/to-list', (req, res) => {
   const r = store.get(req.params.id);
   if (!r) return notFound(res);
-  const only = Array.isArray(req.body?.ingredients) ? new Set(req.body.ingredients) : null;
-  const items = r.ingredients.filter((i) => !only || only.has(i)).map((name) => ({ name, details: r.title }));
-  const l = lists.addItems(req.body?.listId || lists.all()[0]?.id, items);
+  // The page sends the (possibly scaled) ingredient lines; fall back to the stored ones.
+  const lines = Array.isArray(req.body?.ingredients) ? strArr(req.body.ingredients) : r.ingredients;
+  const l = lists.addItems(req.body?.listId || lists.all()[0]?.id, lines.map((name) => ({ name, details: r.title })));
   l ? res.json(l) : notFound(res);
 });
 
