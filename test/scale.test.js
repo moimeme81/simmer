@@ -5,6 +5,15 @@ const { scaleLine, parseYield } = require('../public/scale');
 
 const cases = [
   // [line, factor, lang, expected]
+  // Real Radio-Canada Mordu formats
+  ['Pâtes, au choix - 350 g (¾ lb)', 2, 'fr', 'Pâtes, au choix - 700 g (1 ½ lb)'],
+  ['Pâtes, au choix - 350 g (¾ lb)', 0.5, 'fr', 'Pâtes, au choix - 175 g (6 oz)'],
+  ['Beurre non salé - 40 g (3 c. à soupe), divisé', 2, 'fr', 'Beurre non salé - 80 g (6 c. à soupe), divisé'],
+  ['Vin blanc, bouillon ou eau - 60 ml (¼ tasse)', 0.5, 'fr', 'Vin blanc, bouillon ou eau - 30 ml (2 c. à soupe)'],
+  ['Moutarde forte de Dijon - 10 ml (2 c. à thé)', 2, 'fr', 'Moutarde forte de Dijon - 20 ml (4 c. à thé)'],
+  ['Crème 15 % - 250 ml (1 tasse)', 2, 'fr', 'Crème 15 % - 500 ml (2 tasses)'],
+  ['Sel et poivre du moulin - Au goût', 2, 'fr', 'Sel et poivre du moulin - Au goût'],
+  ['1 ml (1/4 c. à thé) de poudre à pâte', 2, 'fr', '2 ml (½ c. à thé) de poudre à pâte'],
   ['1 tasse (250 ml) de lait', 2, 'fr', '2 tasses (500 ml) de lait'],
   ['250 ml (1 cup) milk', 1.5, 'en', '375 ml (1 ½ cups) milk'],
   ['250 ml / 1 cup milk', 2, 'en', '500 ml / 2 cups milk'],

@@ -140,9 +140,16 @@
     tbsp: (v) => (v >= 16 && Math.abs(v / 16 - Math.round(v / 16)) < 1e-6 ? { id: 'cup', v: v / 16 } : null),
     oz: (v) => (v >= 16 && Math.abs(v / 16 - Math.round(v / 16)) < 1e-6 ? { id: 'lb', v: v / 16 } : null),
   };
+  // Awkward amounts read better in a smaller unit: 1/8 cup is 2 tbsp, 3/8 lb is 6 oz.
+  const near = (x) => Math.abs(x - Math.round(x)) < 0.02;
+  const nice = (v) => Math.round(v * 2) / 2;
+  const DEMOTE = {
+    cup: (v) => (!(near(v * 4) || near(v * 3)) && v < 1 ? { id: 'tbsp', v: nice(v * 16) } : null),
+    lb: (v) => (!(near(v * 4) || near(v * 3)) && v < 1 ? { id: 'oz', v: nice(v * 16) } : null),
+  };
   const SURFACE = {
-    en: { l: 'L', kg: 'kg', tbsp: 'tbsp', cup: 'cups', lb: 'lb' },
-    fr: { l: 'L', kg: 'kg', tbsp: 'c. à soupe', cup: 'tasses', lb: 'lb' },
+    en: { l: 'L', kg: 'kg', tbsp: 'tbsp', cup: 'cups', lb: 'lb', oz: 'oz' },
+    fr: { l: 'L', kg: 'kg', tbsp: 'c. à soupe', cup: 'tasses', lb: 'lb', oz: 'oz' },
   };
   const isFrenchLine = (s) => /[àâçéèêëîïôûùü]|\b(?:tasses?|cuill\w*|de|d'|du|des|et|ou|au|le|la|les|une?|pour)\b/i.test(s);
 
@@ -221,7 +228,7 @@
       let unit = f.unit;
       let { text, last } = scaleNumberText(f.numText, factor, unit, lang);
       let unitText = f.unitText;
-      const promo = unit && PROMOTE[unit.id]?.(last);
+      const promo = unit && (PROMOTE[unit.id]?.(last) || DEMOTE[unit.id]?.(last));
       if (promo && !/[–—-]/.test(f.numText.replace(/^\d+[\s-]\d+\/\d+$/, ''))) {
         const range = f.numText.match(RANGE_RE);
         if (!range) {
