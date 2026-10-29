@@ -1,5 +1,6 @@
 # Features in detail
 
+- **Printing**: *Print* on a recipe prints it as you see it (the servings and units you picked, with empty boxes to tick off ingredients, the steps, your notes and the source link). On a shopping list the printer button prints the unchecked items by aisle. Both drop the menus and buttons and fit on a page; use your browser's *Save as PDF* to keep a copy.
 - **Meal plan**: a week view and a month calendar (switch at the top). Tap a meal to edit or share it, the **+** on a day adds one, and *Add this week (or month) to a list* puts the planned recipes' ingredients on a list, scaled to the servings you planned. The plan can be exported as a calendar file.
 - **Lists** open as a list of lists (name, icon, colour, items remaining, who it is shared with). Each list has its own aisles, stores and a hide-checked toggle. On a phone the index and the list are two screens.
 - **Recipe photos**: recipes saved without a picture (AnyList often leaves them out) are checked again every day against their source link, with growing pauses between failed tries. The Import page shows how many are missing and can run a search now; a recipe page has a *Find a photo* button.

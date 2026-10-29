@@ -11,6 +11,7 @@
 - **Clean recipes from any link.** Standard recipe markup works with no API key; an optional `ANTHROPIC_API_KEY` reads pages without it. Write your own, or edit any recipe, with photos from your files or a web search.
 - **Cook mode.** Full-screen steps with the screen kept awake, and times in a step become one-tap timers. Cook several recipes at once.
 - **Scaling and units.** Scales bilingual quantities (`1 tasse (250 ml)`), and each person picks metric, imperial, both or as-written separately for weight, volume, length and temperature, including the numbers inside the steps.
+- **Print** recipes (at your chosen servings and units) and shopping lists, cleanly, on one page.
 - **Lists that know ingredients.** Items sort themselves into aisles, with your own store layouts, per-list categories and templates (groceries, hardware, IKEA, to-do, blank).
 - **Meal plan.** Week or month calendar, shared per meal, with “add to a list” scaled to the servings you planned.
 - **A household, or just you.** Invite family with a one-time link. Share recipes, lists and single meals with households or individual people.

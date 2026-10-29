@@ -100,6 +100,7 @@
           <div class="row" style="gap:14px">${badge(cur, 52)}<div><h2 class="rtitle" style="margin:0;font-size:30px">${esc(listName(cur))}</h2>
             <small class="muted">${cur.mine ? esc(S.shareText(cur)) : esc(t('lists.ofOwner', { name: cur.ownerName }))}</small></div></div>
           <div class="row toolbar">
+            <button id="printBtn" aria-label="${esc(t('print.button'))}" title="${esc(t('print.button'))}">${ic('print')}</button>
             <button id="hideBtn" aria-pressed="${hide}" title="${esc(t(hide ? 'lists.showChecked' : 'lists.hideChecked'))}" aria-label="${esc(t(hide ? 'lists.showChecked' : 'lists.hideChecked'))}">${ic(hide ? 'eyeoff' : 'eye')}</button>
             ${cur.mine ? `<button id="shareBtn" aria-label="${esc(t('share.button'))}" title="${esc(t('share.button'))}">${ic('share')}</button>` : ''}
             <button id="setBtn" aria-label="${esc(t('lists.settings'))}" title="${esc(t('lists.settings'))}">${ic('gear')}</button></div>
@@ -109,7 +110,8 @@
           ${!cur.auto && cur.categories.length ? `<select id="addCat" aria-label="${esc(t('lists.aisle'))}" style="max-width:190px"><option value="">${t('lists.noCategory')}</option>${cur.categories.map((c) => `<option value="${c.id}" ${c.id === addCat ? 'selected' : ''}>${esc(catLabel(c))}</option>`).join('')}</select>` : ''}
           <button class="primary">${t('lists.add')}</button></form>
         ${groups.map((g) => `<section class="aisle ${g.label ? '' : 'nohead'}" style="--ac:${g.color}">${g.label ? `<h3 class="aislehead">${esc(g.label)}<span>${byAisle.get(g.id).length}</span></h3>` : ''}<ul class="items">${byAisle.get(g.id).sort((x, y) => x.name.localeCompare(y.name)).map(itemRow).join('')}</ul></section>`).join('') || `<p class="muted">${t('lists.nothing')}</p>`}
-        ${done.length && !hide ? `<h3 class="sec" style="margin-top:22px">${t('lists.inCart', { n: done.length })} <button class="quiet" id="clear">${t('lists.clear')}</button></h3><ul class="items">${done.map(itemRow).join('')}</ul>` : ''}
+        ${done.length && !hide ? `<h3 class="sec noprint" style="margin-top:22px">${t('lists.inCart', { n: done.length })} <button class="quiet" id="clear">${t('lists.clear')}</button></h3><ul class="items noprint">${done.map(itemRow).join('')}</ul>` : ''}
+        <p class="printonly pfoot">${esc(t('print.footer', { date: new Date().toLocaleDateString(I18n.lang === 'fr' ? 'fr-CA' : 'en-CA', { year: 'numeric', month: 'long', day: 'numeric' }) }))}</p>
         ${done.length && hide ? `<p class="muted hiddenn">${t('lists.hiddenN', { n: done.length })} <button class="quiet" id="clear">${t('lists.clear')}</button></p>` : ''}`;
       wireDetail();
     };
@@ -118,6 +120,7 @@
     const wireDetail = () => {
       const app = $('#ldetail');
       app.querySelectorAll('[data-f]').forEach((b) => (b.onclick = () => { filter = b.dataset.f; drawDetail(); }));
+      $('#printBtn').onclick = () => S.printPage(listName(cur));
       $('#hideBtn').onclick = () => { setPref(hideKey(), hiding() ? '' : '1'); drawDetail(); };
       $('#addItem').onsubmit = async (e) => {
         e.preventDefault();

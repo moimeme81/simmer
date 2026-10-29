@@ -47,6 +47,7 @@
     share: '<circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="18" cy="18" r="2.6"/><path d="m8.3 10.8 7.4-3.6M8.3 13.2l7.4 3.6"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    print: '<path d="M7 9V3.5h10V9"/><rect x="3.5" y="9" width="17" height="8" rx="2"/><path d="M7 14h10v6.5H7z"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9s1.3-6.3 3.9-9z"/>',
     up: '<path d="m6 15 6-6 6 6"/>',
     down: '<path d="m6 9 6 6 6-6"/>',
@@ -127,6 +128,14 @@
     return await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(blob); });
   }
 
+  /** Print the page as it is on screen (current servings and units). The tab title becomes the printout's header and file name. */
+  const printPage = (title) => {
+    const old = document.title;
+    document.title = title ? `${title} – Simmer` : old;
+    const back = () => { document.title = old; removeEventListener('afterprint', back); };
+    addEventListener('afterprint', back);
+    setTimeout(() => { try { window.print(); } catch { /* no printer support here */ } if (!('onafterprint' in window)) back(); }, 50);
+  };
   async function refreshMe() {
     S.me = await api('/api/me');
     S.people = await api('/api/people');
@@ -137,5 +146,5 @@
   const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 
-  Object.assign(S, { $, t, esc, fold, api, get: (u) => api(u), post: send('POST'), put: send('PUT'), patch: send('PATCH'), del: send('DELETE'), mins, ic, modal, shareText, avatar, squarePhoto, shareFields, readShare, shareDialog, refreshMe, personName, aisleLabel, weekday, dateLabel, ymd, parseYmd, app: $('#app') });
+  Object.assign(S, { $, t, esc, fold, api, get: (u) => api(u), post: send('POST'), put: send('PUT'), patch: send('PATCH'), del: send('DELETE'), mins, ic, modal, shareText, avatar, squarePhoto, shareFields, readShare, shareDialog, printPage, refreshMe, personName, aisleLabel, weekday, dateLabel, ymd, parseYmd, app: $('#app') });
 })();
