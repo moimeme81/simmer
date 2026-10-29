@@ -14,6 +14,7 @@
 - **Print** recipes (at your chosen servings and units) and shopping lists, cleanly, on one page.
 - **Lists that know ingredients.** Items sort themselves into aisles, with your own store layouts, per-list categories and templates (groceries, hardware, IKEA, to-do, blank).
 - **Meal plan.** Week or month calendar, shared per meal, with “add to a list” scaled to the servings you planned.
+- **Two-factor sign-in.** Optional authenticator-app codes with recovery codes, per person.
 - **A household, or just you.** Invite family with a one-time link. Share recipes, lists and single meals with households or individual people.
 - **Link with a friend's Simmer.** Two admins swap keys and the servers act like one: everyone appears in every Share list, and recipes, lists, meals and collections are shared live, one share at a time. See [docs/linking-simmers.md](docs/linking-simmers.md).
 - **Collections, search, ratings and notes** for a recipe box that stays easy to browse.
@@ -90,4 +91,4 @@ The server is Node 22 + Express with a plain-script front end (no build step). S
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE).
+GPL-3.0-only. See [LICENSE](LICENSE). Includes the MIT-licensed [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (`public/vendor/qrcode.js`) for two-factor setup QR codes.

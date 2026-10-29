@@ -21,6 +21,7 @@
           <label for="au">${t('auth.username')}</label><input id="au" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
           <label for="ap">${t('auth.password')}</label><input id="ap" name="password" type="password" autocomplete="${joining ? 'new-password' : 'current-password'}" minlength="${joining ? 8 : 1}" required>
           ${joining ? `<small class="muted">${t('auth.hint')}</small>` : ''}
+          <div id="acodebox" hidden><label for="acode">${t('tf.signInCode')}</label><input id="acode" name="code" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" inputmode="text"><small class="muted">${t('tf.signInHelp')}</small></div>
           <p class="err" id="aerr" hidden></p>
           <button class="primary wide">${t(joining ? 'auth.create' : 'auth.login')}</button>
         </form>`}
@@ -39,7 +40,10 @@
         else await S.post('/api/auth/login', b);
         if (kind === 'join') history.replaceState(null, '', '#/');
         S.boot();
-      } catch (x) { flash($('#aerr'), x.message, true); }
+      } catch (x) {
+        if (x.code === 'needs-2fa') { $('#acodebox').hidden = false; $('#acode').required = true; $('#acode').focus(); if (b.code) flash($('#aerr'), x.message, true); else $('#aerr').hidden = true; return; }
+        flash($('#aerr'), x.message, true);
+      }
     };
   };
 
@@ -76,6 +80,8 @@
             <form id="pw"><label for="pc">${t('acct.current')}</label><input id="pc" type="password" autocomplete="current-password" required>
               <label for="pnw">${t('acct.new')}</label><input id="pnw" type="password" autocomplete="new-password" minlength="8" required>
               <p id="pwm" hidden></p><div class="row"><button>${t('acct.save')}</button></div></form>
+            <h2 class="sec" style="margin-top:22px">${t('tf.title')}</h2>
+            <div id="tfbox"></div>
           </section>
 
           <section class="panel stack">
@@ -118,7 +124,7 @@
             <h2 class="sec" style="margin-top:22px">${t('acct.users')}</h2>
             ${resetMsg ? `<p class="ok">${esc(resetMsg)}</p>` : ''}
             <ul class="plain">${users.map((u) => `<li class="row between"><span>${esc(u.name)} <span class="muted">@${esc(u.username)}${u.admin ? ` · ${t('acct.admin')}` : ''}</span></span>
-              ${u.id === me.id ? '' : `<span class="row"><button class="quiet" data-reset="${u.id}" data-n="${esc(u.name)}">${t('acct.reset')}</button><button class="quiet" data-ru="${u.id}" data-n="${esc(u.name)}">${t('acct.removeUser')}</button></span>`}</li>`).join('')}</ul>
+              ${u.id === me.id ? '' : `<span class="row">${u.twoFactor ? `<button class="quiet" data-r2="${u.id}" data-n="${esc(u.name)}">${t('tf.adminReset')}</button>` : ''}<button class="quiet" data-reset="${u.id}" data-n="${esc(u.name)}">${t('acct.reset')}</button><button class="quiet" data-ru="${u.id}" data-n="${esc(u.name)}">${t('acct.removeUser')}</button></span>`}</li>`).join('')}</ul>
           </section>` : ''}
           ${me.admin || me.linkedSimmers ? '<section class="panel stack" id="fedbox"></section>' : ''}
         </div>
@@ -157,6 +163,7 @@
         await S.refreshMe(); Object.assign(me, S.me);
       });
       S.federationAccount($('#fedbox'));
+      S.twoFactorPanel($('#tfbox'), me, async () => { await S.refreshMe(); Object.assign(me, S.me); users.splice(0, users.length, ...(me.admin ? await api('/api/admin/users') : [])); });
       $('#tf').onsubmit = async (e) => { e.preventDefault(); newToken = (await S.post('/api/tokens', { name: $('#tn').value })).token; tokens.splice(0, tokens.length, ...(await api('/api/tokens'))); draw(); };
       $('#tkc')?.addEventListener('click', (e) => copy(newToken, e.target));
       app.querySelectorAll('[data-revoke]').forEach((b) => (b.onclick = async () => { await S.del('/api/tokens/' + b.dataset.revoke); tokens.splice(0, tokens.length, ...(await api('/api/tokens'))); draw(); }));
@@ -166,6 +173,7 @@
         inviteLink = `${location.origin}/#/join/${code}`; draw();
       });
       $('#ilc')?.addEventListener('click', (e) => copy(inviteLink, e.target));
+      app.querySelectorAll('[data-r2]').forEach((b) => (b.onclick = async () => { if (!confirm(t('tf.confirmAdminReset', { name: b.dataset.n }))) return; await S.post(`/api/admin/users/${b.dataset.r2}/reset-2fa`); users.splice(0, users.length, ...(await api('/api/admin/users'))); draw(); }));
       app.querySelectorAll('[data-reset]').forEach((b) => (b.onclick = async () => { const r = await S.post(`/api/admin/users/${b.dataset.reset}/reset-password`); resetMsg = t('acct.resetDone', { name: b.dataset.n, pw: r.password }); draw(); }));
       app.querySelectorAll('[data-ru]').forEach((b) => (b.onclick = async () => {
         if (!confirm(t('acct.confirmRemoveUser', { name: b.dataset.n }))) return;

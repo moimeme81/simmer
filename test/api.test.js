@@ -518,3 +518,57 @@ test('a Mealie server can be read from and written to', async () => {
     assert.equal((await chris.post('/api/exchange/mealie/import', { url: 'nonsense', token: 'x' })).status, 400);
   } finally { srv.close(); }
 });
+
+/* ---------- two-factor sign-in ---------- */
+test('the first account is the admin and invited accounts are plain users', async () => {
+  assert.equal((await chris.get('/api/me')).json.admin, true);
+  assert.equal((await mom.get('/api/me')).json.admin, false);
+  assert.equal((await mom.get('/api/admin/users')).status, 403);
+});
+
+test('two-factor sign-in: set up with an authenticator app, recovery codes, and an admin reset', async () => {
+  const Totp = require('../src/totp');
+  const code = (await chris.post('/api/admin/invites')).json.code;
+  const dan = person();
+  assert.equal((await dan.post('/api/auth/register', { invite: code, name: 'Dan', username: 'dan', password: 'longpassword' })).status, 200);
+  assert.equal((await dan.get('/api/me')).json.twoFactor, false);
+  const start = (await dan.post('/api/me/2fa/start')).json;
+  assert.match(start.secret, /^[A-Z2-7]{32}$/); assert.match(start.uri, /^otpauth:\/\/totp\/Simmer:dan\?secret=/);
+  assert.equal((await dan.post('/api/me/2fa/enable', { code: '000000' })).status, 400, 'a wrong code does not turn it on');
+  assert.equal((await dan.get('/api/me')).json.twoFactor, false);
+  const on = await dan.post('/api/me/2fa/enable', { code: Totp.codeAt(start.secret) });
+  assert.equal(on.status, 200); assert.equal(on.json.recoveryCodes.length, 10);
+  assert.equal((await dan.get('/api/me')).json.twoFactor, true);
+  assert.ok(!JSON.stringify((await dan.get('/api/me')).json).includes(start.secret), 'the secret is never sent back');
+
+  const login = (body) => fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'dan', password: 'longpassword', ...body }) }).then(async (r) => ({ status: r.status, json: await r.json(), cookie: r.headers.get('set-cookie') }));
+  const none = await login({});
+  assert.equal(none.status, 401); assert.equal(none.json.code, 'needs-2fa'); assert.equal(none.cookie, null);
+  assert.equal((await login({ password: 'wrong password' })).json.code, undefined, 'a wrong password reveals nothing about 2FA');
+  const bad = await login({ code: '123456' });
+  assert.equal(bad.status, 401); assert.equal(bad.cookie, null);
+  // the code used to turn it on cannot be replayed; the next one works
+  assert.equal((await login({ code: Totp.codeAt(start.secret) })).status, 401, 'a code works once');
+  const next = Totp.hotp(start.secret, Totp.stepAt() + 1);
+  const ok = await login({ code: next });
+  assert.equal(ok.status, 200); assert.ok(ok.cookie);
+  const token = (await login({ code: on.json.recoveryCodes[0], asToken: true })).json.token;
+  assert.match(token, /^smr_/, 'a recovery code signs in, also for the embedded panel');
+  assert.equal((await login({ code: on.json.recoveryCodes[0] })).status, 401, 'each recovery code works once');
+  assert.equal((await fetch(base + '/api/me', { headers: { authorization: 'Bearer ' + token } })).status, 200);
+
+  // turning it off needs the password and a code
+  assert.equal((await dan.post('/api/me/2fa/disable', { password: 'longpassword', code: '111111' })).status, 403);
+  assert.equal((await dan.post('/api/me/2fa/disable', { password: 'nope nope nope', code: on.json.recoveryCodes[1] })).status, 403);
+  const fresh = await dan.post('/api/me/2fa/recovery', { password: 'longpassword', code: on.json.recoveryCodes[2] });
+  assert.equal(fresh.json.recoveryCodes.length, 10);
+  assert.equal((await login({ code: on.json.recoveryCodes[3] })).status, 401, 'old recovery codes stop working');
+
+  // an admin can switch it off for someone who lost their phone
+  assert.equal((await mom.post('/api/admin/users/x/reset-2fa')).status, 403);
+  const uid = (await chris.get('/api/admin/users')).json.find((u) => u.username === 'dan');
+  assert.equal(uid.twoFactor, true);
+  assert.equal((await chris.post(`/api/admin/users/${uid.id}/reset-2fa`)).status, 200);
+  assert.equal((await login({})).status, 200, 'password alone works again');
+  assert.equal((await chris.get('/api/admin/users')).json.find((u) => u.username === 'dan').twoFactor, false);
+});

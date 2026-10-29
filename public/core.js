@@ -26,8 +26,8 @@
     const tok = S.embedToken()?.token;
     const r = await fetch(url, (opts || tok) && { ...opts, headers: { ...(opts && { 'content-type': 'application/json' }), ...(tok && { authorization: 'Bearer ' + tok }) }, body: opts?.body && JSON.stringify(opts.body) });
     const j = await r.json().catch(() => ({}));
-    if (r.status === 401 && !url.startsWith('/api/auth/')) { S.onSignedOut?.(); throw new Error(I18n.err(j.error || 'Sign in required')); }
-    if (!r.ok) throw new Error(I18n.err(j.error || r.statusText));
+    if (r.status === 401 && !url.startsWith('/api/auth/')) { S.onSignedOut?.(); throw Object.assign(new Error(I18n.err(j.error || 'Sign in required')), { code: j.code }); }
+    if (!r.ok) throw Object.assign(new Error(I18n.err(j.error || r.statusText)), { code: j.code });
     return j;
   };
   const send = (method) => (url, body) => api(url, { method, body: body || {} });

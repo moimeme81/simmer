@@ -95,7 +95,7 @@ app.post('/api/auth/setup', wrap((req, res) => {
   res.json(acc.publicUser(u));
 }));
 app.post('/api/auth/login', wrap((req, res) => {
-  const { token } = acc.login(str(req.body?.username, 80), str(req.body?.password, 500), req.ip);
+  const { token } = acc.login(str(req.body?.username, 80), str(req.body?.password, 500), req.ip, str(req.body?.code, 40));
   if (req.body?.asToken) {
     // Pages embedded in another site (the Home Assistant panel) often cannot keep a login cookie, so they get an app token instead.
     // It shows up under Account -> API tokens and can be revoked there; only the newest 10 are kept.
@@ -151,6 +151,11 @@ app.use('/api', (req, res, next) => (req.path.startsWith('/auth/') ? next() : ne
 
 /* ---------- me, people, tokens, admin ---------- */
 app.get('/api/me', (req, res) => res.json({ ...acc.publicUser(req.user), households: acc.describeHouseholds(me(req)), linkedSimmers: fed.active().length, ...(req.user.admin ? { pendingLinks: fed.pendingCount() } : {}) }));
+app.post('/api/me/2fa/start', wrap((req, res) => res.json(acc.twoFactorStart(me(req)))));
+app.post('/api/me/2fa/enable', wrap((req, res) => res.json({ recoveryCodes: acc.twoFactorEnable(me(req), str(req.body?.code, 20)) })));
+app.post('/api/me/2fa/disable', wrap((req, res) => { acc.twoFactorDisable(me(req), str(req.body?.password, 500), str(req.body?.code, 40)); res.json({ ok: true }); }));
+app.post('/api/me/2fa/recovery', wrap((req, res) => res.json({ recoveryCodes: acc.newRecoveryCodes(me(req), str(req.body?.password, 500), str(req.body?.code, 40)) })));
+app.get('/api/me/2fa', (req, res) => res.json({ enabled: !!req.user.totp?.enabled, recoveryLeft: acc.recoveryLeft(me(req)) }));
 app.put('/api/me', wrap((req, res) => res.json(acc.publicUser(acc.updateProfile(me(req), { ...req.body, keepSession: req.sessionId })))));
 app.get('/api/people', wrap(async (_req, res) => res.json([...acc.people(), ...(await fed.directory()).map((p) => ({ ...p, remote: true, avatar: null }))])));
 app.get('/api/aisles', (_req, res) => res.json(AISLES));
@@ -180,13 +185,14 @@ app.get('/api/tokens', (req, res) => res.json(acc.listTokens(me(req))));
 app.post('/api/tokens', wrap((req, res) => res.json({ token: acc.createToken(me(req), req.body?.name) })));
 app.delete('/api/tokens/:id', (req, res, next) => (acc.deleteToken(me(req), req.params.id) ? res.json({ ok: true }) : next(notFound())));
 
-app.get('/api/admin/users', admin, (_req, res) => res.json(acc.db.users.map((u) => ({ id: u.id, name: u.name, username: u.username, admin: !!u.admin, createdAt: u.createdAt }))));
+app.get('/api/admin/users', admin, (_req, res) => res.json(acc.db.users.map((u) => ({ id: u.id, name: u.name, username: u.username, admin: !!u.admin, createdAt: u.createdAt, twoFactor: !!u.totp?.enabled }))));
 app.delete('/api/admin/users/:id', admin, wrap((req, res) => {
   if (req.params.id === me(req)) throw fail(400, 'You cannot remove yourself');
   if (!acc.removeUser(req.params.id)) throw notFound();
   clearAvatarFiles(req.params.id);
   res.json({ ok: true });
 }));
+app.post('/api/admin/users/:id/reset-2fa', admin, wrap((req, res) => { if (!acc.adminResetTwoFactor(req.params.id)) throw notFound(); res.json({ ok: true }); }));
 app.post('/api/admin/users/:id/reset-password', admin, wrap((req, res) => {
   const temp = acc.resetPassword(req.params.id);
   if (!temp) throw notFound();

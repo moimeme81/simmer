@@ -423,3 +423,10 @@ ol.cats input:not([type=color]){flex:1;min-width:0}
   .items li{background:none!important}
   .listhead small{display:none}
 }
+
+.tfqr{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:6px 0 14px}
+.tfqr svg{width:176px;height:176px;background:#fff;border-radius:10px;padding:4px;flex:none}
+.tfsecret{display:block;word-break:break-all;font-size:15px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--line);letter-spacing:.04em}
+pre.codes{font-size:18px;line-height:1.7;margin:6px 0;columns:2;letter-spacing:.03em;user-select:all}
+#printcodes{display:none}
+@media print{body.print-codes>*:not(#printcodes){display:none!important}body.print-codes #printcodes{display:block!important;padding:20mm;font:16pt/1.8 monospace}body.print-codes #printcodes h1{font:700 22pt system-ui;margin:0 0 8mm}}

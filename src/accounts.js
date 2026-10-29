@@ -13,7 +13,8 @@ const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const secret = (prefix) => prefix + crypto.randomBytes(24).toString('base64url');
 const SESSION_MS = 30 * 24 * 3600 * 1000;
 const INVITE_MS = 7 * 24 * 3600 * 1000;
-const fail = (status, message) => Object.assign(new Error(message), { status });
+const fail = (status, message, code) => Object.assign(new Error(message), { status }, code ? { code } : {});
+const Totp = require('./totp');
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   return { salt, hash: crypto.scryptSync(password, salt, 64).toString('hex') };
@@ -49,7 +50,7 @@ class Accounts {
   avatarUrl(u) { return u?.av ? `/avatars/${u.id}?v=${u.av}` : null; }
   setAvatar(id, version) { const u = this.user(id); if (u) { u.av = version; this.save(); } }
   publicUser(u) {
-    return u && { id: u.id, name: u.name, username: u.username, avatar: this.avatarUrl(u), admin: !!u.admin, lang: u.lang || null, cookStyle: u.cookStyle === 'page' ? 'page' : 'focus', units: cleanUnits(u.units), collections: u.collections || [], autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id) };
+    return u && { id: u.id, name: u.name, username: u.username, avatar: this.avatarUrl(u), admin: !!u.admin, lang: u.lang || null, cookStyle: u.cookStyle === 'page' ? 'page' : 'focus', units: cleanUnits(u.units), collections: u.collections || [], autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id), twoFactor: !!u.totp?.enabled };
   }
   people() { return this.db.users.map((u) => ({ id: u.id, name: u.name, avatar: this.avatarUrl(u) })); }
   user(id) { return this.db.users.find((u) => u.id === id) || null; }
@@ -113,7 +114,7 @@ class Accounts {
   }
 
   /* ---------- login, with a small brute-force brake ---------- */
-  login(username, password, ip) {
+  login(username, password, ip, code) {
     const key = `${ip}|${cleanUsername(username)}`;
     const f = this.fails.get(key);
     if (f && f.until > Date.now()) throw fail(429, 'Too many attempts. Wait a minute and try again.');
@@ -125,9 +126,74 @@ class Accounts {
       this.fails.set(key, { n, until: n >= 5 ? Date.now() + 60000 : 0 });
       throw fail(401, 'Wrong username or password');
     }
+    if (u.totp?.enabled) {
+      // Right password, but this account also needs a code from the authenticator app (or a recovery code).
+      if (!String(code || '').trim()) throw fail(401, 'Enter the code from your authenticator app', 'needs-2fa');
+      if (!this.verifySecondFactor(u, code)) {
+        const n = (f?.n || 0) + 1;
+        this.fails.set(key, { n, until: n >= 5 ? Date.now() + 60000 : 0 });
+        throw fail(401, 'Wrong code', 'needs-2fa');
+      }
+    }
     this.fails.delete(key);
     return this.startSession(u.id);
   }
+
+  /* ---------- two-factor authentication (authenticator app + recovery codes) ---------- */
+  /** True for a current code from the app (each code works once) or an unused recovery code, which is then used up. */
+  verifySecondFactor(u, code) {
+    const t = u.totp;
+    if (!t?.enabled) return false;
+    const step = Totp.verify(t.secret, code, { after: t.lastStep ?? -1 });
+    if (step !== null) { t.lastStep = step; this.save(); return true; }
+    const h = Totp.hashRecovery(code);
+    if (t.recovery?.includes(h)) { t.recovery = t.recovery.filter((x) => x !== h); this.save(); return true; }
+    return false;
+  }
+  twoFactorStart(userId) {
+    const u = this.user(userId);
+    if (u.totp?.enabled) throw fail(400, 'Two-factor sign-in is already on');
+    u.totpPending = Totp.newSecret();
+    this.save();
+    return { secret: u.totpPending, uri: Totp.otpauth(u.totpPending, u.username) };
+  }
+  twoFactorEnable(userId, code) {
+    const u = this.user(userId);
+    if (!u.totpPending) throw fail(400, 'Start again: press Set up');
+    const step = Totp.verify(u.totpPending, code);
+    if (step === null) throw fail(400, 'That code is not right. Check the app, and that your phone’s clock is correct.');
+    const codes = Totp.recoveryCodes();
+    u.totp = { enabled: true, secret: u.totpPending, lastStep: step, recovery: codes.map(Totp.hashRecovery), since: new Date().toISOString() };
+    delete u.totpPending;
+    this.save();
+    return codes;
+  }
+  /** Turning it off or making new recovery codes needs the password and a current code, so a stolen session cannot do it. */
+  confirmSecondFactor(userId, password, code) {
+    const u = this.user(userId);
+    if (!u.totp?.enabled) throw fail(400, 'Two-factor sign-in is not on');
+    if (!checkPassword(u, String(password || ''))) throw fail(403, 'Wrong password');
+    if (!this.verifySecondFactor(u, code)) throw fail(403, 'Wrong code');
+    return u;
+  }
+  twoFactorDisable(userId, password, code) { const u = this.confirmSecondFactor(userId, password, code); delete u.totp; delete u.totpPending; this.save(); }
+  newRecoveryCodes(userId, password, code) {
+    const u = this.confirmSecondFactor(userId, password, code);
+    const codes = Totp.recoveryCodes();
+    u.totp.recovery = codes.map(Totp.hashRecovery);
+    this.save();
+    return codes;
+  }
+  /** For an admin helping someone who lost their phone and recovery codes. */
+  adminResetTwoFactor(id) {
+    const u = this.user(id);
+    if (!u) return false;
+    delete u.totp; delete u.totpPending;
+    this.db.sessions = this.db.sessions.filter((s) => s.userId !== id);
+    this.save();
+    return true;
+  }
+  recoveryLeft(userId) { return this.user(userId)?.totp?.recovery?.length || 0; }
   startSession(userId) {
     const token = secret('');
     const s = { id: uuid(), hash: sha(token), userId, expires: Date.now() + SESSION_MS };
