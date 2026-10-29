@@ -259,7 +259,7 @@ async function recipe(id, opts = {}) {
   $('#toPlan').onclick = () => S.mealSheet({ recipe: r, date: S.ymd(new Date()) }, () => { $('#toPlan').textContent = t('share.save') + ' ✓'; });
   $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));
   $('#webPhoto')?.addEventListener('click', () => S.photoPicker(r.title, async (p) => {
-    try { await S.post(`/api/recipes/${id}/image-from-url`, { url: p.url, credit: p.credit }); recipe(id, opts); }
+    try { await S.post(`/api/recipes/${id}/image-from-url`, { url: p.url, alt: p.alt, credit: p.credit }); recipe(id, opts); }
     catch (x) { $('#fpErr').textContent = x.message; $('#fpErr').hidden = false; }
   }));
   $('#findPhoto')?.addEventListener('click', async (e) => {

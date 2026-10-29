@@ -35,7 +35,7 @@
           const { results } = await api('/api/image-search?q=' + encodeURIComponent(q));
           stat.textContent = results.length ? t('photo.pick') : t('photo.noResults');
           $('#pgrid', el).innerHTML = results.map((r, n) => `<button type="button" class="pcell" data-n="${n}" title="${esc(r.title)}"><img src="${esc(r.thumb)}" alt="${esc(r.title)}" loading="lazy" referrerpolicy="no-referrer"><small>${esc(r.source)}</small></button>`).join('');
-          el.querySelectorAll('.pcell').forEach((b) => (b.onclick = () => { const r = results[+b.dataset.n]; close(); onPick({ url: r.url, thumb: r.thumb, credit: [r.credit, r.source].filter(Boolean).join(' · ') }); }));
+          el.querySelectorAll('.pcell').forEach((b) => (b.onclick = () => { const r = results[+b.dataset.n]; close(); onPick({ url: r.url, alt: r.alt, thumb: r.thumb, credit: [r.credit, r.source].filter(Boolean).join(' · ') }); }));
         } catch (x) { stat.textContent = x.message; stat.className = 'err'; }
       };
       $('#pf2', el).onsubmit = (e) => { e.preventDefault(); run(); };
@@ -73,7 +73,7 @@
         try { pending = await shrink(f); $('#rthumb', el).innerHTML = `<img src="data:image/jpeg;base64,${pending}" alt="">`; $('#rrm', el).hidden = false; }
         catch { const er = $('#rerr', el); er.textContent = t('acct.photoBad'); er.hidden = false; }
       };
-      $('#rweb', el).onclick = () => S.photoPicker($('#rt', el).value, (p) => { pending = { url: p.url, credit: p.credit }; $('#rthumb', el).innerHTML = `<img src="${esc(p.thumb)}" alt="" referrerpolicy="no-referrer">`; $('#rrm', el).hidden = false; });
+      $('#rweb', el).onclick = () => S.photoPicker($('#rt', el).value, (p) => { pending = { url: p.url, alt: p.alt, credit: p.credit }; $('#rthumb', el).innerHTML = `<img src="${esc(p.thumb)}" alt="" referrerpolicy="no-referrer">`; $('#rrm', el).hidden = false; });
       $('#rrm', el).onclick = () => { pending = 'remove'; $('#rthumb', el).innerHTML = ic('image'); $('#rrm', el).hidden = true; };
       $('#rf', el).onsubmit = async (e) => {
         e.preventDefault();

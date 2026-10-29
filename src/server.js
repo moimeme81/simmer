@@ -214,8 +214,13 @@ app.post('/api/recipes/:id/image-from-url', wrap(async (req, res) => {
   if (r.owner !== me(req)) throw fail(403, 'Only the owner can change the picture');
   const url = str(req.body?.url, 2000).trim();
   if (!/^https?:\/\//i.test(url)) throw fail(400, 'Invalid URL');
-  let buf;
-  try { buf = await downloadPhoto(url, cfg.allowPrivate); } catch (e) { throw fail(422, e.message); }
+  let buf, err;
+  const alt = str(req.body?.alt, 2000).trim();
+  for (const u of [url, /^https?:\/\//i.test(alt) ? alt : null]) {   // some sites block hotlinking: fall back to the search engine's own copy
+    if (!u || buf) continue;
+    try { buf = await downloadPhoto(u, cfg.allowPrivate); } catch (e) { err = e; }
+  }
+  if (!buf && err) throw fail(422, err.message);
   const img = buf ? store.saveImage(r.id, buf) : null;
   if (!img) throw fail(422, 'That link did not give a JPEG, PNG or WebP picture');
   const { imageCheck, ...cur } = store.get(r.id);
