@@ -44,7 +44,12 @@ for (const line of DATA.trim().split('\n')) {
     if (!names.length) continue;
     const key = norm(names[0]);
     KEYS.set(key, aisle);
-    for (const n of names) if (!INDEX.has(norm(n))) INDEX.set(norm(n), { key, aisle });
+    for (const n of names) {
+      // Index English plural forms too (potatoes, cherries, peaches) because the matcher only strips a trailing "s".
+      const f = fold(n);
+      const forms = [f, `${f}s`, `${f}es`, f.endsWith('y') ? `${f.slice(0, -1)}ies` : null];
+      for (const v of forms) if (v && !INDEX.has(norm(v))) INDEX.set(norm(v), { key, aisle });
+    }
   }
 }
 

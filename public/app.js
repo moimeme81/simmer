@@ -1,42 +1,21 @@
 (() => {
 'use strict';
-const $ = (s, r = document) => r.querySelector(s);
-const t = (k, v) => I18n.t(k, v);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const api = async (url, opts) => {
-  const r = await fetch(url, opts && { ...opts, headers: { 'content-type': 'application/json' }, body: opts.body && JSON.stringify(opts.body) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(I18n.err(j.error || r.statusText));
-  return j;
-};
-const mins = (m) => !m ? null : m >= 60 ? (m % 60 ? t('time.hm', { h: Math.floor(m / 60), m: m % 60 }) : t('time.h', { h: m / 60 })) : t('time.min', { n: m });
-const listName = (l) => (l.name === 'Groceries' && !l.externalId ? t('lists.groceries') : l.name);
-
-const ICONS = {
-  book: '<path d="M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2z"/><path d="M4 20a2 2 0 0 0 2 2h13v-4"/>',
-  list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
-  import: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
-  timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.5"/><path d="M9.5 2h5"/>',
-  close: '<path d="M6 6l12 12M18 6 6 18"/>',
-  pause: '<path d="M8 5v14M16 5v14"/>',
-  play: '<path d="M8 5l11 7-11 7z"/>',
-  basket: '<path d="M4 9h16l-1.6 10a2 2 0 0 1-2 1.7H7.6a2 2 0 0 1-2-1.7z"/><path d="M8.5 9 11 3.5M15.5 9 13 3.5"/>',
-};
-const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
-const app = $('#app');
+const { $, t, esc, fold, api, mins, ic } = S;
+const app = S.app;
 
 /* ---------- chrome: nav, tab bar, language ---------- */
 function chrome() {
   const h = location.hash;
-  const cur = h.startsWith('#/lists') ? 'lists' : h.startsWith('#/import') ? 'import' : 'recipes';
-  const items = [['recipes', '#/', 'book', t('nav.recipes')], ['lists', '#/lists', 'list', t('nav.lists')], ['import', '#/import', 'import', t('nav.import')]];
-  $('#topnav').innerHTML = items.map(([id, href, , label]) => `<a href="${href}" ${id === cur ? 'aria-current="page"' : ''}>${label}</a>`).join('');
-  $('#tabbar').innerHTML = items.map(([id, href, icon, label]) => `<a href="${href}" ${id === cur ? 'aria-current="page"' : ''}>${ic(icon)}<span>${label}</span></a>`).join('');
+  const cur = h.startsWith('#/lists') ? 'lists' : h.startsWith('#/plan') ? 'plan' : h.startsWith('#/import') ? 'import' : h.startsWith('#/account') ? 'account' : 'recipes';
+  const items = [['recipes', '#/', 'book', t('nav.recipes')], ['plan', '#/plan', 'cal', t('nav.plan')], ['lists', '#/lists', 'list', t('nav.lists')], ['import', '#/import', 'import', t('nav.import')], ['account', '#/account', 'user', S.me ? S.me.name.split(' ')[0] : t('nav.account')]];
+  $('#topnav').innerHTML = items.filter((x) => x[0] !== 'account').map(([id, href, , label]) => `<a href="${href}" ${id === cur ? 'aria-current="page"' : ''}>${esc(label)}</a>`).join('');
+  $('#whoami').innerHTML = S.me ? `<a href="#/account" ${cur === 'account' ? 'aria-current="page"' : ''}>${ic('user')} ${esc(S.me.name.split(' ')[0])}</a>` : '';
+  $('#tabbar').innerHTML = items.filter((x) => x[0] !== 'import').map(([id, href, icon, label]) => `<a href="${href}" ${id === cur ? 'aria-current="page"' : ''}>${ic(icon)}<span>${esc(id === 'account' ? t('nav.account') : label)}</span></a>`).join('');
   $('#lang').textContent = t('lang.other');
   document.documentElement.lang = I18n.lang;
 }
-$('#lang').onclick = () => { I18n.set(I18n.lang === 'fr' ? 'en' : 'fr'); route(); footer(); };
+S.chrome = chrome;
+$('#lang').onclick = () => { I18n.set(I18n.lang === 'fr' ? 'en' : 'fr'); if (S.me) S.put('/api/me', { lang: I18n.lang }).catch(() => {}); route(); footer(); };
 
 /* ---------- timers dock ---------- */
 const dock = $('#dock');
@@ -137,7 +116,8 @@ async function recipe(id) {
     <h1 class="rtitle">${esc(r.title)}</h1>
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
     <div class="facts" id="facts"></div>
-    <div class="cta"><button class="primary" id="cookBtn">${t('recipe.cookBtn')}</button><button id="toList">${t('recipe.toList')}</button><button class="quiet" id="del">${t('recipe.delete')}</button></div>
+    <div class="cta"><button class="primary" id="cookBtn">${t('recipe.cookBtn')}</button><button id="toList">${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
+    <p class="muted sharedline" id="sharedline">${esc(r.mine ? S.shareText(r) : t('recipe.guest', { name: r.ownerName }))}</p>
     <div class="rbody">
       <aside><h2 class="sec">${t('recipe.ingredients')}</h2><div class="scaler" id="scaler"></div><ul class="ing" id="ing"></ul></aside>
       <section><h2 class="sec">${t('recipe.method')}</h2><ol class="steps">${r.steps.map((s, n) => `<li>${stepHTML(s, n + 1)}</li>`).join('')}</ol>
@@ -166,15 +146,17 @@ async function recipe(id) {
   draw();
 
   let tm; $('#notes').oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => api('/api/recipes/' + id, { method: 'PUT', body: { notes: e.target.value } }), 600); };
-  $('#del').onclick = async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } };
+  $('#del')?.addEventListener('click', async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } });
+  $('#toPlan').onclick = () => S.mealSheet({ recipe: r, date: S.ymd(new Date()) }, () => { $('#toPlan').textContent = t('share.save') + ' ✓'; });
+  $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));
   $('#cookBtn').onclick = () => cook(st);
   $('#toList').onclick = async () => {
     const ls = await api('/api/lists');
     const lines = r.ingredients.map((i, n) => (checked.has(n) ? null : sc(i))).filter(Boolean);
     let to = ls[0];
-    if (ls.length > 1) { const pick = prompt(t('recipe.pickList') + '\n' + ls.map((l, n) => `${n + 1}. ${listName(l)}`).join('\n'), '1'); if (!pick) return; to = ls[+pick - 1] || ls[0]; }
+    if (ls.length > 1) { const pick = prompt(t('recipe.pickList') + '\n' + ls.map((l, n) => `${n + 1}. ${S.listName(l)}`).join('\n'), '1'); if (!pick) return; to = ls[+pick - 1] || ls[0]; }
     await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: lines } });
-    $('#toList').textContent = t('recipe.added', { n: lines.length, list: listName(to) });
+    $('#toList').textContent = t('recipe.added', { n: lines.length, list: S.listName(to) });
   };
 }
 
@@ -222,39 +204,6 @@ function cook(st) {
   }
   document.addEventListener('keydown', key);
   draw();
-}
-
-/* ---------- shopping lists ---------- */
-let listTimer;
-async function listsView(selected) {
-  clearInterval(listTimer);
-  let all = await api('/api/lists');
-  let cur = all.find((l) => l.id === selected) || all[0];
-  const draw = () => {
-    const open = cur.items.filter((i) => !i.checked), done = cur.items.filter((i) => i.checked);
-    const row = (i) => `<li class="${i.checked ? 'done' : ''}" data-id="${i.id}"><input type="checkbox" ${i.checked ? 'checked' : ''} aria-label="${esc(i.name)}"><span class="n">${esc(i.name)}${i.quantity ? ' ' + esc(i.quantity) : ''}${i.details ? `<small>${esc(i.details)}</small>` : ''}</span><button class="x" aria-label="${esc(t('lists.remove'))}">${ic('close')}</button></li>`;
-    app.innerHTML = `
-      <div class="tabs">${all.map((l) => `<button data-l="${l.id}" class="${l.id === cur.id ? 'on' : ''}">${esc(listName(l))}</button>`).join('')}<button class="quiet" id="newList">${t('lists.new')}</button></div>
-      <form class="field" id="addItem" style="margin-bottom:12px"><input type="text" required placeholder="${esc(t('lists.addPh'))}" aria-label="${esc(t('lists.addPh'))}"><button class="primary">${t('lists.add')}</button></form>
-      <ul class="items">${open.map(row).join('') || `<li class="muted">${t('lists.nothing')}</li>`}</ul>
-      ${done.length ? `<h2 class="sec" style="margin-top:22px">${t('lists.inCart', { n: done.length })} <button class="quiet" id="clear">${t('lists.clear')}</button></h2><ul class="items">${done.map(row).join('')}</ul>` : ''}
-      ${all.length > 1 ? `<p><button class="quiet" id="delList">${t('lists.delete')}</button></p>` : ''}`;
-    app.querySelectorAll('[data-l]').forEach((b) => (b.onclick = () => { cur = all.find((l) => l.id === b.dataset.l); draw(); }));
-    $('#newList').onclick = async () => { const n = prompt(t('lists.newName')); if (!n) return; const l = await api('/api/lists', { method: 'POST', body: { name: n } }); all.push({ ...l, items: [] }); cur = all.at(-1); draw(); };
-    $('#addItem').onsubmit = async (e) => { e.preventDefault(); const name = $('input', e.target).value.trim(); if (!name) return; cur = await api(`/api/lists/${cur.id}/items`, { method: 'POST', body: { name } }); all[all.findIndex((l) => l.id === cur.id)] = cur; draw(); $('#addItem input').focus(); };
-    app.querySelectorAll('ul.items li[data-id]').forEach((li) => {
-      const id = li.dataset.id;
-      $('input', li).onchange = async (e) => { const it = cur.items.find((x) => x.id === id); it.checked = e.target.checked; draw(); await api(`/api/lists/${cur.id}/items/${id}`, { method: 'PATCH', body: { checked: it.checked } }); };
-      $('.x', li).onclick = async () => { cur.items = cur.items.filter((x) => x.id !== id); draw(); await api(`/api/lists/${cur.id}/items/${id}`, { method: 'DELETE' }); };
-    });
-    $('#clear')?.addEventListener('click', async () => { cur = await api(`/api/lists/${cur.id}/clear-checked`, { method: 'POST' }); all[all.findIndex((l) => l.id === cur.id)] = cur; draw(); });
-    $('#delList')?.addEventListener('click', async () => { if (!confirm(t('lists.confirmDelete', { name: listName(cur) }))) return; await api(`/api/lists/${cur.id}`, { method: 'DELETE' }); all = all.filter((l) => l.id !== cur.id); cur = all[0]; draw(); });
-  };
-  draw();
-  listTimer = setInterval(async () => {
-    if (!location.hash.startsWith('#/lists') || document.activeElement?.tagName === 'INPUT') return;
-    try { const fresh = await api('/api/lists'); if (JSON.stringify(fresh) !== JSON.stringify(all)) { all = fresh; cur = all.find((l) => l.id === cur.id) || all[0]; draw(); } } catch { /* offline */ }
-  }, 5000);
 }
 
 /* ---------- import ---------- */
@@ -318,15 +267,30 @@ async function footer() {
   } catch { el.textContent = ''; }
 }
 
-/* ---------- router ---------- */
+/* ---------- router and boot ---------- */
 function route() {
-  clearInterval(listTimer); clearInterval(importTimer);
+  S.stopLists?.(); clearInterval(importTimer);
+  const h = location.hash;
+  const join = h.match(/^#\/join\/([\w-]+)/);
+  if (join && !S.me) { S.authScreen('join', join[1]); return; }
   chrome(); dockSig = ''; renderDock();
-  const m = location.hash.match(/^#\/r\/([\w-]+)/);
-  (location.hash.startsWith('#/lists') ? listsView() : location.hash.startsWith('#/import') ? importView() : m ? recipe(m[1]) : home())
-    .catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`));
+  const m = h.match(/^#\/r\/([\w-]+)/);
+  const view = h.startsWith('#/lists') ? () => S.views.lists() : h.startsWith('#/plan') ? () => S.views.plan() : h.startsWith('#/account') ? () => S.views.account()
+    : h.startsWith('#/import') ? importView : m ? () => recipe(m[1]) : home;
+  view().catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`));
   scrollTo(0, 0);
 }
 addEventListener('hashchange', route);
-route(); footer();
+
+S.onSignedOut = () => { if (S.me) { S.me = null; S.boot(); } };
+S.boot = async () => {
+  const st = await api('/api/auth/state');
+  if (st.setup) { S.me = null; document.body.classList.add('auth'); return S.authScreen('setup'); }
+  if (!st.user) { S.me = null; document.body.classList.add('auth'); const j = location.hash.match(/^#\/join\/([\w-]+)/); return S.authScreen(j ? 'join' : 'login', j && j[1]); }
+  document.body.classList.remove('auth');
+  await S.refreshMe();
+  if (st.user.lang && !localStorage.getItem('simmer-lang')) I18n.set(st.user.lang);
+  route(); footer();
+};
+S.boot().catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`));
 })();

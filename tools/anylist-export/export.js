@@ -4,7 +4,7 @@
  * Copy your AnyList recipes (with photos) and shopping lists into Simmer.
  *
  *   ANYLIST_EMAIL=you@example.com ANYLIST_PASSWORD=... \
- *   node export.js --to http://unraid.local:3000 [--user U --pass P] [--backup anylist-backup.json] [--dry-run]
+ *   SIMMER_TOKEN=smr_... node export.js --to http://unraid.local:3000 [--backup anylist-backup.json] [--dry-run]
  *
  * Runs on your own computer: your AnyList password never reaches the Simmer server.
  * Safe to re-run: recipes/lists are matched by their AnyList id and updated, not duplicated.
@@ -24,15 +24,15 @@ const password = process.env.ANYLIST_PASSWORD;
 const target = (arg('to') || '').toString().replace(/\/+$/, '');
 const dry = !!arg('dry-run', false);
 const backup = arg('backup');
-const authUser = arg('user'), authPass = arg('pass');
+const token = process.env.SIMMER_TOKEN || ''; // create one on Simmer's Account page
 
-if (!email || !password || (!target && !dry && !backup)) {
-  console.error('Usage: ANYLIST_EMAIL=… ANYLIST_PASSWORD=… node export.js --to http://HOST:3000 [--user U --pass P] [--backup file.json] [--dry-run]');
+if (!email || !password || (!target && !dry && !backup) || (target && !dry && !token)) {
+  console.error('Usage: ANYLIST_EMAIL=… ANYLIST_PASSWORD=… SIMMER_TOKEN=smr_… node export.js --to http://HOST:3000 [--backup file.json] [--dry-run]');
   process.exit(1);
 }
 
 const headers = { 'content-type': 'application/json' };
-if (authUser && authPass) headers.authorization = 'Basic ' + Buffer.from(`${authUser}:${authPass}`).toString('base64');
+if (token) headers.authorization = `Bearer ${token}`;
 
 async function post(path, body) {
   const r = await fetch(target + path, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) });

@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Simmer",
+        "description": "Enter the address of your Simmer server and an API token. Create the token on Simmer's Account page.",
+        "data": { "url": "Address (for example http://192.168.1.10:3000)", "token": "API token" }
+      }
+    },
+    "error": { "cannot_connect": "Could not reach Simmer at that address.", "invalid_auth": "Simmer refused that token." },
+    "abort": { "already_configured": "This Simmer account is already connected." }
+  }
+}

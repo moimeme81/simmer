@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à Simmer",
+        "description": "Entrez l’adresse de votre serveur Simmer et un jeton d’API. Créez le jeton dans la page Compte de Simmer.",
+        "data": { "url": "Adresse (par exemple http://192.168.1.10:3000)", "token": "Jeton d’API" }
+      }
+    },
+    "error": { "cannot_connect": "Impossible de joindre Simmer à cette adresse.", "invalid_auth": "Simmer a refusé ce jeton." },
+    "abort": { "already_configured": "Ce compte Simmer est déjà connecté." }
+  }
+}
