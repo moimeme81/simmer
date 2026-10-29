@@ -123,7 +123,7 @@ class ListStore {
   learned() { return this.accounts?.db.learned || {}; }
 
   blank(owner, name, extra = {}) {
-    return { id: uuid(), name: String(name).slice(0, 80), owner, users: [], households: [], aisleOrder: [], stores: [], aisleStores: {}, itemStores: {}, items: [], ...extra };
+    return { id: uuid(), name: String(name).slice(0, 80), icon: '', color: '', owner, users: [], households: [], aisleOrder: [], stores: [], aisleStores: {}, itemStores: {}, items: [], ...extra };
   }
   createList(owner, name, share, externalId) {
     return this.mutate((db) => { const l = this.blank(owner, name, { externalId, ...(share || {}) }); db.lists.push(l); return l; });
@@ -191,6 +191,8 @@ class ListStore {
       const l = this.find(db, listId);
       if (!l) return null;
       if (b.name != null && String(b.name).trim()) l.name = String(b.name).trim().slice(0, 80);
+      if ('icon' in b) l.icon = String(b.icon || '').slice(0, 8);
+      if ('color' in b) l.color = /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : '';
       const order = (o) => (Array.isArray(o) ? [...new Set(o.filter((a) => AISLES.includes(a)))] : []);
       if ('aisleOrder' in b) l.aisleOrder = order(b.aisleOrder);
       if (Array.isArray(b.stores)) {

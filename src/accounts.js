@@ -40,10 +40,12 @@ class Accounts {
   /* ---------- users ---------- */
   get needsSetup() { return this.db.users.length === 0; }
   get firstAdmin() { return this.db.users.find((u) => u.admin) || this.db.users[0]; }
+  avatarUrl(u) { return u?.av ? `/avatars/${u.id}?v=${u.av}` : null; }
+  setAvatar(id, version) { const u = this.user(id); if (u) { u.av = version; this.save(); } }
   publicUser(u) {
-    return u && { id: u.id, name: u.name, username: u.username, admin: !!u.admin, lang: u.lang || null, autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id) };
+    return u && { id: u.id, name: u.name, username: u.username, avatar: this.avatarUrl(u), admin: !!u.admin, lang: u.lang || null, autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id) };
   }
-  people() { return this.db.users.map((u) => ({ id: u.id, name: u.name })); }
+  people() { return this.db.users.map((u) => ({ id: u.id, name: u.name, avatar: this.avatarUrl(u) })); }
   user(id) { return this.db.users.find((u) => u.id === id) || null; }
 
   validate(name, username, password) {
@@ -183,7 +185,7 @@ class Accounts {
   describeHouseholds(userId) {
     return this.householdsOf(userId).map((h) => ({
       id: h.id, name: h.name, owner: h.owner, mine: h.owner === userId,
-      members: h.members.map((m) => ({ id: m, name: this.user(m)?.name || '?' })),
+      members: h.members.map((m) => ({ id: m, name: this.user(m)?.name || '?', avatar: this.avatarUrl(this.user(m)) })),
     }));
   }
   createHousehold(userId, name) {

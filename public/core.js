@@ -33,6 +33,12 @@
     plus: '<path d="M12 5v14M5 12h14"/>',
     up: '<path d="m6 15 6-6 6 6"/>',
     down: '<path d="m6 9 6 6 6-6"/>',
+    eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeoff: '<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.6 0 3-.4 4.2-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+    camera: '<path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6"/>',
+    back: '<path d="m15 5-7 7 7 7"/>',
+    image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 2.5-2.5L20 18"/>',
   };
   const ic = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 
@@ -63,9 +69,9 @@
   /** Checkbox groups for households and people. Read the result with readShare(el). */
   function shareFields(share = {}, name = 'share') {
     const hh = S.me.households, ppl = S.people.filter((p) => p.id !== S.me.id);
-    const box = (kind, id, label, on) => `<label class="pick"><input type="checkbox" data-${name}="${kind}" value="${esc(id)}" ${on ? 'checked' : ''}><span>${esc(label)}</span></label>`;
+    const box = (kind, id, label, on, person) => `<label class="pick"><input type="checkbox" data-${name}="${kind}" value="${esc(id)}" ${on ? 'checked' : ''}>${person ? avatar(person, 26) : ''}<span>${esc(label)}</span></label>`;
     return `${hh.length ? `<fieldset><legend>${t('share.households')}</legend>${hh.map((h) => box('households', h.id, h.name, share.households?.includes(h.id))).join('')}</fieldset>` : ''}
-      <fieldset><legend>${t('share.people')}</legend>${ppl.length ? ppl.map((p) => box('users', p.id, p.name, share.users?.includes(p.id))).join('') : `<p class="muted">${t('share.noPeople')}</p>`}</fieldset>`;
+      <fieldset><legend>${t('share.people')}</legend>${ppl.length ? ppl.map((p) => box('users', p.id, p.name, share.users?.includes(p.id), p)).join('') : `<p class="muted">${t('share.noPeople')}</p>`}</fieldset>`;
   }
   const readShare = (el, name = 'share') => ({
     households: [...el.querySelectorAll(`[data-${name}=households]:checked`)].map((c) => c.value),
@@ -84,6 +90,23 @@
     });
   }
 
+  /** Round profile picture, or coloured initials when the person has none. p: { id, name, avatar }. */
+  function avatar(p, size = 32) {
+    if (!p) return '';
+    let h = 0; for (const c of String(p.id || p.name || '')) h = (h * 31 + c.charCodeAt(0)) % 360;
+    const initials = String(p.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+    return `<span class="av" style="--s:${size}px;--h:${h}" title="${esc(p.name)}">${p.avatar ? `<img src="${esc(p.avatar)}" alt="" loading="lazy">` : esc(initials)}</span>`;
+  }
+  /** Crop a picked image to a centred square, shrink it to 256 px and return it as base64 JPEG. */
+  async function squarePhoto(file, px = 256) {
+    const bmp = await createImageBitmap(file);
+    const side = Math.min(bmp.width, bmp.height), c = document.createElement('canvas');
+    c.width = c.height = px;
+    c.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, px, px);
+    const blob = await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.86));
+    return await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(blob); });
+  }
+
   async function refreshMe() {
     S.me = await api('/api/me');
     S.people = await api('/api/people');
@@ -94,5 +117,5 @@
   const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 
-  Object.assign(S, { $, t, esc, fold, api, get: (u) => api(u), post: send('POST'), put: send('PUT'), patch: send('PATCH'), del: send('DELETE'), mins, ic, modal, shareText, shareFields, readShare, shareDialog, refreshMe, personName, aisleLabel, weekday, dateLabel, ymd, parseYmd, app: $('#app') });
+  Object.assign(S, { $, t, esc, fold, api, get: (u) => api(u), post: send('POST'), put: send('PUT'), patch: send('PATCH'), del: send('DELETE'), mins, ic, modal, shareText, avatar, squarePhoto, shareFields, readShare, shareDialog, refreshMe, personName, aisleLabel, weekday, dateLabel, ymd, parseYmd, app: $('#app') });
 })();

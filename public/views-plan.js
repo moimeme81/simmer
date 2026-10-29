@@ -29,6 +29,7 @@
         <small class="muted">${t('meal.whatHelp')}</small>
         <div class="two"><div><label for="mv">${t('meal.servings')}</label><input id="mv" type="number" min="1" max="100" step="1" value="${m?.servings || (opts.recipe ? yieldNumber(opts.recipe.yield) || '' : '')}" ${mine ? '' : 'disabled'}></div></div>
         <label for="mn">${t('meal.note')}</label><input id="mn" value="${esc(m?.note || '')}" ${mine ? '' : 'disabled'}>
+        ${m && (m.attendees || []).length > 1 ? `<div class="who"><b>${t('meal.who')}</b><ul class="plain">${m.attendees.map((a) => `<li class="row">${S.avatar(a, 30)}<span>${esc(a.you ? t('acct.you') : a.name)}${a.id === m.owner ? ` <small class="muted">${t('meal.host')}</small>` : ''}</span></li>`).join('')}</ul></div>` : ''}
         ${mine ? `<h3 class="sub">${t('meal.share')}</h3><p class="muted" style="margin:0">${t('meal.shareHelp')}</p><div id="msh">${S.shareFields(share, 'meal')}</div>` : `<p class="muted">${t('meal.from', { name: m.ownerName })}</p>`}
         <p class="err" id="merr" hidden></p>
         <div class="row between wrap">
@@ -67,11 +68,14 @@
     const days = Array.from({ length: 7 }, (_, n) => addDays(weekStart, n));
     const refresh = () => S.views.plan();
     const mealCard = (m) => {
-      const others = [...(m.sharedWith.households || []).map((h) => S.me.households.find((x) => x.id === h)?.name), ...(m.sharedWith.users || []).map(S.personName)].filter(Boolean);
+      const hh = (m.householdNames || (m.sharedWith.households || []).map((h) => S.me.households.find((x) => x.id === h)?.name)).filter(Boolean);
+      const people = (m.attendees || []).filter((a) => m.mine ? !a.you : !a.you && a.id !== m.owner);
+      const withNames = [...people.map((a) => a.name), ...hh];
       return `<button class="meal ${m.mine ? '' : 'guest'}" data-m="${m.id}">
         <span class="slot">${t('slot.' + m.slot)}</span><b>${esc(m.title)}</b>
         ${m.servings ? `<small>${m.servings} ${esc(t('meal.servings').toLowerCase())}</small>` : ''}
-        ${!m.mine ? `<small class="by">${esc(t('meal.from', { name: m.ownerName }))}</small>` : others.length ? `<small class="by">${ic('share')} ${esc(others.join(', '))}</small>` : ''}</button>`;
+        ${!m.mine ? `<small class="by">${esc(t('meal.from', { name: m.ownerName }))}${withNames.length ? esc(' · ' + t('meal.withLower', { names: withNames.join(', ') })) : ''}</small>` : ''}
+        ${(m.attendees || []).length > 1 || hh.length ? `<span class="faces" title="${esc(t('meal.with', { names: [...(m.attendees || []).map((a) => a.you ? t('acct.you') : a.name), ...hh].join(', ') }))}">${(m.attendees || []).map((a) => S.avatar(a, 24)).join('')}${hh.map((n) => `<span class="hhtag">${esc(n)}</span>`).join('')}</span>` : ''}</button>`;
     };
     S.app.innerHTML = `
       <div class="row between wrap planhead">

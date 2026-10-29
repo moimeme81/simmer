@@ -9,7 +9,7 @@ function chrome() {
   const cur = h.startsWith('#/lists') ? 'lists' : h.startsWith('#/plan') ? 'plan' : h.startsWith('#/import') ? 'import' : h.startsWith('#/account') ? 'account' : 'recipes';
   const items = [['recipes', '#/', 'book', t('nav.recipes')], ['plan', '#/plan', 'cal', t('nav.plan')], ['lists', '#/lists', 'list', t('nav.lists')], ['import', '#/import', 'import', t('nav.import')], ['account', '#/account', 'user', S.me ? S.me.name.split(' ')[0] : t('nav.account')]];
   $('#topnav').innerHTML = items.filter((x) => x[0] !== 'account').map(([id, href, , label]) => `<a href="${href}" ${id === cur ? 'aria-current="page"' : ''}>${esc(label)}</a>`).join('');
-  $('#whoami').innerHTML = S.me ? `<a href="#/account" ${cur === 'account' ? 'aria-current="page"' : ''}>${ic('user')} ${esc(S.me.name.split(' ')[0])}</a>` : '';
+  $('#whoami').innerHTML = S.me ? `<a href="#/account" ${cur === 'account' ? 'aria-current="page"' : ''}>${S.me.avatar ? S.avatar(S.me, 28) : ic('user')} ${esc(S.me.name.split(' ')[0])}</a>` : '';
   $('#tabbar').innerHTML = items.filter((x) => x[0] !== 'import').map(([id, href, icon, label]) => `<a href="${href}" ${id === cur ? 'aria-current="page"' : ''}>${ic(icon)}<span>${esc(id === 'account' ? t('nav.account') : label)}</span></a>`).join('');
   $('#lang').textContent = t('lang.other');
   document.documentElement.lang = I18n.lang;
@@ -112,7 +112,7 @@ async function recipe(id) {
 
   app.innerHTML = `
     <a class="back" href="#/">${t('recipe.back')}</a>
-    ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : ''}
+    ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : r.mine && /^https?:/.test(r.sourceUrl || '') ? `<div class="nophoto">${ic('image')}<span>${t('photo.missingHere')}</span><button id="findPhoto">${t('photo.find')}</button><small class="err" id="fpErr" hidden></small></div>` : ''}
     <h1 class="rtitle">${esc(r.title)}</h1>
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
     <div class="facts" id="facts"></div>
@@ -149,6 +149,11 @@ async function recipe(id) {
   $('#del')?.addEventListener('click', async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } });
   $('#toPlan').onclick = () => S.mealSheet({ recipe: r, date: S.ymd(new Date()) }, () => { $('#toPlan').textContent = t('share.save') + ' ✓'; });
   $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));
+  $('#findPhoto')?.addEventListener('click', async (e) => {
+    const b = e.target; b.disabled = true; b.textContent = t('photo.finding'); $('#fpErr').hidden = true;
+    try { await S.post(`/api/recipes/${id}/find-photo`); recipe(id); }
+    catch (x) { b.disabled = false; b.textContent = t('photo.find'); $('#fpErr').textContent = x.message; $('#fpErr').hidden = false; }
+  });
   $('#cookBtn').onclick = () => cook(st);
   $('#toList').onclick = async () => {
     const ls = await api('/api/lists');
@@ -208,6 +213,24 @@ function cook(st) {
 
 /* ---------- import ---------- */
 let importTimer;
+/** Recipes saved without a picture: Simmer keeps looking at their source page. */
+async function photoCard() {
+  const box = $('#photos');
+  if (!box) return;
+  const draw = (p) => {
+    if (!$('#photos')) return;
+    box.innerHTML = `<h2 class="sec">${t('photo.title')}</h2><p class="muted" style="margin:0 0 8px">${t(p.enabled ? 'photo.blurb' : 'photo.off')}</p>
+      <p style="margin:6px 0"><b>${esc(p.missing ? t('photo.missing', { n: p.missing }) : t('photo.allGood'))}</b>${p.lastRun ? ` <span class="muted">· ${esc(t('photo.last', { n: p.lastFound || 0 }))}</span>` : ''}</p>
+      ${p.missing ? `<div class="cta" style="margin:10px 0 0"><button class="primary" id="pgo" ${p.running ? 'disabled' : ''}>${t(p.running ? 'photo.running' : 'photo.run')}</button></div>` : ''}
+      <p class="err" id="perr" hidden></p>`;
+    $('#pgo')?.addEventListener('click', async () => {
+      try { await S.post('/api/photos/check'); } catch (x) { $('#perr').textContent = x.message; $('#perr').hidden = false; return; }
+      const tick = async () => { const n = await api('/api/photos/status'); draw(n); if (n.running && $('#photos')) setTimeout(tick, 1200); };
+      draw({ ...p, running: true }); setTimeout(tick, 1200);
+    });
+  };
+  try { draw(await api('/api/photos/status')); } catch { box.hidden = true; }
+}
 async function importView() {
   clearInterval(importTimer);
   app.innerHTML = `
@@ -222,7 +245,9 @@ async function importView() {
       </form>
       <div id="prog" hidden></div>
     </div>
-    <p class="muted" style="max-width:540px">${t('import.note')}</p>`;
+    <p class="muted" style="max-width:540px">${t('import.note')}</p>
+    <div class="panel" id="photos" style="margin-top:18px"></div>`;
+  photoCard();
   const prog = $('#prog'), form = $('#al'), go = $('#go');
   const draw = (stt) => {
     if (stt.state === 'idle') return;
@@ -275,7 +300,7 @@ function route() {
   if (join && !S.me) { S.authScreen('join', join[1]); return; }
   chrome(); dockSig = ''; renderDock();
   const m = h.match(/^#\/r\/([\w-]+)/);
-  const view = h.startsWith('#/lists') ? () => S.views.lists() : h.startsWith('#/plan') ? () => S.views.plan() : h.startsWith('#/account') ? () => S.views.account()
+  const view = h.startsWith('#/lists') ? () => S.views.lists((h.match(/^#\/lists\/([\w-]+)/) || [])[1]) : h.startsWith('#/plan') ? () => S.views.plan() : h.startsWith('#/account') ? () => S.views.account()
     : h.startsWith('#/import') ? importView : m ? () => recipe(m[1]) : home;
   view().catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`));
   scrollTo(0, 0);

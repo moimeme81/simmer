@@ -68,6 +68,14 @@
   // Accounts, sharing, aisles, stores, meal plan.
   const MORE = {
     en: {
+      'lists.create': 'New list', 'lists.newTitle': 'New list', 'lists.search': 'Search lists', 'lists.back': 'All lists', 'lists.noMatch': 'No list matches.',
+      'lists.remaining': '{n} items remaining', 'lists.remaining1': '1 item remaining', 'lists.noItems': 'No items', 'lists.hideChecked': 'Hide checked items', 'lists.showChecked': 'Show checked items',
+      'lists.hiddenN': '{n} checked items hidden.', 'lists.icon': 'Icon', 'lists.noIcon': 'No icon', 'lists.color': 'Colour',
+      'photo.find': 'Find a photo', 'photo.finding': 'Looking…', 'photo.missingHere': 'This recipe has no photo.', 'photo.title': 'Recipe photos',
+      'photo.blurb': 'Recipes saved without a photo are checked again every day, using their source link.', 'photo.off': 'Automatic photo checks are turned off on this server (PHOTO_CHECK=false), but you can still run one now.',
+      'photo.missing': '{n} recipes without a photo', 'photo.allGood': 'Every recipe has a photo.', 'photo.last': 'last search found {n}', 'photo.run': 'Look for photos now', 'photo.running': 'Looking…',
+      'meal.withLower': 'with {names}', 'meal.who': 'Who is at the table', 'meal.host': 'host',
+      'acct.photoChange': 'Choose a photo', 'acct.photoRemove': 'Remove photo', 'acct.photoHelp': 'Shown beside your name for the people you share with.', 'acct.photoBad': 'That picture could not be read. Try a JPEG or PNG.',
       'nav.plan': 'Plan', 'nav.account': 'Account',
       'auth.setupTitle': 'Welcome to Simmer', 'auth.setupBlurb': 'Create the first account. It becomes the admin and can invite everyone else.',
       'auth.loginTitle': 'Sign in', 'auth.joinTitle': 'Join Simmer', 'auth.joinBlurb': 'Choose a name and password for your account.',
@@ -113,6 +121,14 @@
       'aisle.personal': 'Personal care', 'aisle.pets': 'Pets', 'aisle.other': 'Other',
     },
     fr: {
+      'lists.create': 'Nouvelle liste', 'lists.newTitle': 'Nouvelle liste', 'lists.search': 'Chercher une liste', 'lists.back': 'Toutes les listes', 'lists.noMatch': 'Aucune liste ne correspond.',
+      'lists.remaining': '{n} articles restants', 'lists.remaining1': '1 article restant', 'lists.noItems': 'Aucun article', 'lists.hideChecked': 'Masquer les articles cochés', 'lists.showChecked': 'Afficher les articles cochés',
+      'lists.hiddenN': '{n} articles cochés masqués.', 'lists.icon': 'Icône', 'lists.noIcon': 'Aucune icône', 'lists.color': 'Couleur',
+      'photo.find': 'Trouver une photo', 'photo.finding': 'Recherche…', 'photo.missingHere': 'Cette recette n’a pas de photo.', 'photo.title': 'Photos des recettes',
+      'photo.blurb': 'Les recettes sauvegardées sans photo sont revérifiées chaque jour à partir de leur lien source.', 'photo.off': 'La vérification automatique est désactivée sur ce serveur (PHOTO_CHECK=false), mais vous pouvez en lancer une maintenant.',
+      'photo.missing': '{n} recettes sans photo', 'photo.allGood': 'Toutes les recettes ont une photo.', 'photo.last': 'la dernière recherche en a trouvé {n}', 'photo.run': 'Chercher les photos maintenant', 'photo.running': 'Recherche…',
+      'meal.withLower': 'avec {names}', 'meal.who': 'Qui est à table', 'meal.host': 'hôte',
+      'acct.photoChange': 'Choisir une photo', 'acct.photoRemove': 'Retirer la photo', 'acct.photoHelp': 'Affichée à côté de votre nom pour les personnes avec qui vous partagez.', 'acct.photoBad': 'Impossible de lire cette image. Essayez un JPEG ou un PNG.',
       'nav.plan': 'Menu', 'nav.account': 'Compte',
       'auth.setupTitle': 'Bienvenue dans Simmer', 'auth.setupBlurb': 'Créez le premier compte. Il devient l’administrateur et peut inviter les autres.',
       'auth.loginTitle': 'Connexion', 'auth.joinTitle': 'Rejoindre Simmer', 'auth.joinBlurb': 'Choisissez un nom et un mot de passe pour votre compte.',
@@ -186,6 +202,12 @@
     [/Pick a recipe or type a name/i, { en: null, fr: 'Choisissez une recette ou écrivez un nom.' }],
     [/Pick a date/i, { en: null, fr: 'Choisissez une date.' }],
     [/Cross-site request/i, { en: null, fr: 'Requête refusée.' }],
+    [/Use a JPEG, PNG or WebP/i, { en: null, fr: 'Utilisez une image JPEG, PNG ou WebP de moins de 1 Mo.' }],
+    [/photo search is already running/i, { en: null, fr: 'Une recherche de photos est déjà en cours.' }],
+    [/no source link/i, { en: null, fr: 'Cette recette n’a pas de lien source où chercher une photo.' }],
+    [/page has no picture/i, { en: null, fr: 'Cette page n’a pas d’image.' }],
+    [/picture could not be downloaded/i, { en: null, fr: 'L’image n’a pas pu être téléchargée.' }],
+    [/picture is not a JPEG/i, { en: null, fr: 'L’image n’est pas un JPEG, PNG ou WebP.' }],
     [/Not found/i, { en: null, fr: 'Introuvable.' }],
   ];
 

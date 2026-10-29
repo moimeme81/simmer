@@ -134,4 +134,4 @@ class AnyListImport {
   }
 }
 
-module.exports = { AnyListImport, mapRecipe, setClientFactory: (f) => { clientFactory = f; } };
+module.exports = { AnyListImport, mapRecipe, downloadPhoto, setClientFactory: (f) => { clientFactory = f; } };

@@ -213,4 +213,22 @@ async function extractRecipe(url, cfg) {
   return { ...recipe, sourceUrl: finalUrl, host: new URL(finalUrl).hostname.replace(/^www\./, '') };
 }
 
-module.exports = { extractRecipe, fromJsonLd, parseDuration, isPrivateIp, assertPublic };
+/** The best picture on a recipe page: the Recipe markup image, else the social preview image. */
+function pageImage(html, pageUrl) {
+  const $ = cheerio.load(html);
+  const candidates = [
+    fromJsonLd($, pageUrl)?.image,
+    $('meta[property="og:image:secure_url"]').attr('content'),
+    $('meta[property="og:image"]').attr('content'),
+    $('meta[name="twitter:image"]').attr('content'),
+    $('meta[name="twitter:image:src"]').attr('content'),
+    $('link[rel="image_src"]').attr('href'),
+  ];
+  for (const c of candidates) {
+    if (!c) continue;
+    try { return new URL(c, pageUrl).toString(); } catch { /* not a URL */ }
+  }
+  return null;
+}
+
+module.exports = { extractRecipe, fromJsonLd, parseDuration, isPrivateIp, assertPublic, fetchHtml, pageImage };

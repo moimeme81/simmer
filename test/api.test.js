@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'simmer-'));
 process.env.DATA_DIR = dir;
+process.env.ALLOW_PRIVATE_URLS = 'true'; // the photo finder test talks to a local fake recipe site
 const app = require('../src/server');
 let base, server;
 test.before(async () => { server = app.listen(0); await new Promise((r) => server.once('listening', r)); base = `http://127.0.0.1:${server.address().port}`; });
@@ -22,9 +23,10 @@ const person = () => {
     const json = await res.json().catch(() => ({}));
     return { status: res.status, json };
   };
-  return { call, get: (u) => call('GET', u), post: (u, b) => call('POST', u, b || {}), put: (u, b) => call('PUT', u, b || {}), del: (u) => call('DELETE', u) };
+  return { fetchRaw: (u) => fetch(base + u, { headers: { cookie } }), call, get: (u) => call('GET', u), post: (u, b) => call('POST', u, b || {}), put: (u, b) => call('PUT', u, b || {}), del: (u) => call('DELETE', u) };
 };
 const chris = person(), mom = person(), sis = person(), anon = person();
+const sisFetch = (u) => sis.fetchRaw(u);
 let invite, hh, recipeId, listId, mealId;
 
 test('everything is locked until setup, then the first user becomes admin', async () => {
@@ -179,4 +181,75 @@ test('five wrong passwords lock the account for a minute', async () => {
   const x = person();
   for (let i = 0; i < 5; i++) await x.post('/api/auth/login', { username: 'sis', password: 'wrong wrong' });
   assert.equal((await x.post('/api/auth/login', { username: 'sis', password: 'longpassword' })).status, 429);
+});
+
+/* ---------- later additions ---------- */
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]).toString('base64');
+const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 2)]);
+
+test('who a shared meal is with: every guest sees everyone invited, by name', async () => {
+  const sisId = (await sis.get('/api/me')).json.id, momId = (await mom.get('/api/me')).json.id;
+  const m = (await chris.post('/api/meals', { date: '2026-11-04', slot: 'dinner', title: 'Raclette', users: [sisId, momId] })).json;
+  assert.deepEqual(m.attendees.map((a) => a.name), ['Chris', 'Sis', 'Maman'.replace('Maman', 'Mom')]);
+  const seen = (await sis.get('/api/meals?from=2026-11-04&to=2026-11-04')).json[0];
+  assert.deepEqual(seen.attendees.map((a) => [a.name, a.you]), [['Chris', false], ['Sis', true], ['Mom', false]]);
+});
+
+test('profile photos: upload, serve to signed-in people only, remove', async () => {
+  assert.equal((await chris.put('/api/me/avatar', { image: 'bm90IGFuIGltYWdl' })).status, 400);
+  const up = await chris.put('/api/me/avatar', { image: PNG });
+  assert.equal(up.status, 200);
+  assert.match(up.json.avatar, /^\/avatars\/[\w-]{36}\?v=\d+$/);
+  assert.equal((await sis.get('/api/people')).json.find((p) => p.name === 'Chris').avatar, up.json.avatar);
+  const bytes = await fetch(base + up.json.avatar.split('?')[0], { headers: { cookie: (await sis.call('GET', '/api/me')) && '' } });
+  assert.equal(bytes.status, 401, 'not signed in');
+  // sis is signed in through her own cookie jar: use the client to fetch the file
+  const withCookie = await sisFetch(up.json.avatar);
+  assert.equal(withCookie.status, 200);
+  assert.equal(withCookie.headers.get('content-type'), 'image/png');
+  await chris.del('/api/me/avatar');
+  assert.equal((await sis.get('/api/people')).json.find((p) => p.name === 'Chris').avatar, null);
+});
+
+test('lists carry an icon and a colour, and ignore a bad colour', async () => {
+  const l = (await chris.post('/api/lists', { name: 'Costco', icon: '🛒', color: '#2F7D6B' })).json;
+  assert.equal(l.icon, '🛒'); assert.equal(l.color, '#2F7D6B');
+  const bad = (await chris.put(`/api/lists/${l.id}/settings`, { color: 'red; background:url(x)' })).json;
+  assert.equal(bad.color, '');
+});
+
+test('photo finder: fills in missing pictures from the source page and retries failures later', async () => {
+  const http = require('node:http');
+  const site = http.createServer((req, res) => {
+    if (req.url === '/og') return res.end('<html><head><meta property="og:image" content="/pic.jpg"></head></html>');
+    if (req.url === '/ld') return res.end('<script type="application/ld+json">{"@type":"Recipe","name":"X","image":["/pic.jpg"],"recipeIngredient":["a"],"recipeInstructions":"b"}</script>');
+    if (req.url === '/nopic') return res.end('<html><body>no picture here</body></html>');
+    if (req.url === '/pic.jpg') { res.setHeader('content-type', 'image/jpeg'); return res.end(JPG); }
+    res.statusCode = 404; res.end('gone');
+  });
+  await new Promise((r) => site.listen(0, r));
+  const root = `http://127.0.0.1:${site.address().port}`;
+  const add = async (title, path) => (await chris.post('/api/import/bulk/recipe', { title, ingredients: ['x'], steps: ['y'], sourceUrl: root + path })).json.id;
+  const [og, ld, nopic, gone] = [await add('OG', '/og'), await add('LD', '/ld'), await add('NoPic', '/nopic'), await add('Gone', '/gone')];
+  require('../src/server').photos.delayMs = 0;
+  try {
+    assert.equal((await chris.get('/api/photos/status')).json.missing, 4);
+    assert.equal((await chris.post('/api/photos/check')).status, 202);
+    for (let i = 0; i < 50 && (await chris.get('/api/photos/status')).json.running; i++) await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
+    const get = async (id) => (await chris.get('/api/recipes/' + id)).json;
+    assert.match((await get(og)).image, /^\/images\//);
+    assert.match((await get(ld)).image, /^\/images\//);
+    const np = await get(nopic);
+    assert.equal(np.image, null);
+    assert.equal(np.imageCheck.tries, 1);
+    assert.ok(np.imageCheck.next > Date.now(), 'a failed recipe waits before it is tried again');
+    assert.equal((await chris.get('/api/photos/status')).json.missing, 2);
+    // The manual button explains why it failed.
+    const r = await chris.post(`/api/recipes/${gone}/find-photo`);
+    assert.equal(r.status, 422);
+    assert.match(r.json.error, /HTTP 404/);
+    // Images are private to signed-in people.
+    assert.equal((await fetch(base + (await get(og)).image)).status, 401);
+  } finally { site.close(); }
 });

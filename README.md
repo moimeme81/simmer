@@ -43,6 +43,7 @@ docker compose up -d --build
 | `LLM_MODEL` | claude-haiku-5-5 | Model for the fallback |
 | `TZ` | `UTC` | Timezone, used for “today” in the Home Assistant summary (for example `America/Toronto`) |
 | `ALLOW_PRIVATE_URLS` | false | Allow importing from LAN addresses |
+| `PHOTO_CHECK` | true | Set to `false` to stop the daily search for photos on recipes saved without one |
 
 ## Accounts, households and sharing
 - **Account → Invite someone** makes a one-time link (valid 7 days). Optionally it also adds the person to one of your households.
@@ -55,6 +56,12 @@ docker compose up -d --build
 - Simmer does not do HTTPS itself. Put it behind a reverse proxy before exposing it to the internet.
 - Upgrading from a version without accounts: the first account you create becomes the owner of the existing recipes and lists.
   The old `AUTH_USER`/`AUTH_PASS` variables are ignored.
+
+### Lists, photos and profile pictures
+- **Lists** open as a list of lists (name, icon, colour, items remaining, who it is shared with). Each list has its own aisles, stores and a hide-checked toggle. On a phone the index and the list are two screens.
+- **Recipe photos**: recipes saved without a picture (AnyList often leaves them out) are checked again every day against their source link, with growing pauses between failed tries. The Import page shows how many are missing and can run a search now; a recipe page has a *Find a photo* button.
+- **Profile pictures**: add one on the Account page. It is cropped square and shrunk in the browser, and shown in the menu, households, share dialogs and on shared meals.
+- **Shared meals** show everyone invited, across households, in each person's own meal plan.
 
 ## Home Assistant
 1. In Simmer: **Account → API tokens → Create token** and copy it (shown once).

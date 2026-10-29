@@ -8,6 +8,7 @@ const { Store, ListStore, MealStore } = require('./store');
 const { Accounts, fail } = require('./accounts');
 const { AnyListImport } = require('./anylist');
 const { AISLES } = require('./ingredients');
+const { PhotoFinder } = require('./photos');
 
 const cfg = {
   port: +process.env.PORT || 3000,
@@ -22,6 +23,9 @@ const acc = new Accounts(cfg.dataDir);
 const store = new Store(cfg.dataDir);
 const lists = new ListStore(cfg.dataDir, acc);
 const meals = new MealStore(cfg.dataDir);
+const photos = new PhotoFinder({ store, allowPrivate: cfg.allowPrivate });
+const avatarDir = path.join(cfg.dataDir, 'avatars');
+fs.mkdirSync(avatarDir, { recursive: true });
 
 /** Data created before accounts existed belongs to the first admin. */
 function claimOrphans() {
@@ -104,6 +108,27 @@ app.put('/api/me', wrap((req, res) => res.json(acc.publicUser(acc.updateProfile(
 app.get('/api/people', (_req, res) => res.json(acc.people()));
 app.get('/api/aisles', (_req, res) => res.json(AISLES));
 
+/* ---------- profile photos ---------- */
+const AVATAR_EXT = ['jpg', 'png', 'webp'];
+const avatarType = (b) => (b.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])) ? 'jpg' : b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47])) ? 'png' : b.subarray(8, 12).toString() === 'WEBP' ? 'webp' : null);
+const clearAvatarFiles = (id) => { for (const e of AVATAR_EXT) fs.rmSync(path.join(avatarDir, `${id}.${e}`), { force: true }); };
+app.put('/api/me/avatar', wrap((req, res) => {
+  const buf = Buffer.from(str(req.body?.image, 1_400_000), 'base64');
+  const ext = buf.length > 12 && buf.length <= 1_000_000 ? avatarType(buf) : null;
+  if (!ext) throw fail(400, 'Use a JPEG, PNG or WebP picture under 1 MB');
+  clearAvatarFiles(me(req));
+  fs.writeFileSync(path.join(avatarDir, `${me(req)}.${ext}`), buf);
+  acc.setAvatar(me(req), Date.now());
+  res.json({ avatar: acc.avatarUrl(acc.user(me(req))) });
+}));
+app.delete('/api/me/avatar', (req, res) => { clearAvatarFiles(me(req)); acc.setAvatar(me(req), null); res.json({ ok: true }); });
+app.get('/avatars/:id', need, (req, res, next) => {
+  if (!/^[a-f0-9-]{36}$/.test(req.params.id)) return next(notFound());
+  const file = AVATAR_EXT.map((e) => path.join(avatarDir, `${req.params.id}.${e}`)).find((f) => fs.existsSync(f));
+  if (!file) return next(notFound());
+  res.set('Cache-Control', 'private, max-age=31536000, immutable').sendFile(file);
+});
+
 app.get('/api/tokens', (req, res) => res.json(acc.listTokens(me(req))));
 app.post('/api/tokens', wrap((req, res) => res.json({ token: acc.createToken(me(req), req.body?.name) })));
 app.delete('/api/tokens/:id', (req, res, next) => (acc.deleteToken(me(req), req.params.id) ? res.json({ ok: true }) : next(notFound())));
@@ -112,6 +137,7 @@ app.get('/api/admin/users', admin, (_req, res) => res.json(acc.db.users.map((u) 
 app.delete('/api/admin/users/:id', admin, wrap((req, res) => {
   if (req.params.id === me(req)) throw fail(400, 'You cannot remove yourself');
   if (!acc.removeUser(req.params.id)) throw notFound();
+  clearAvatarFiles(req.params.id);
   res.json({ ok: true });
 }));
 app.post('/api/admin/users/:id/reset-password', admin, wrap((req, res) => {
@@ -233,6 +259,21 @@ app.post('/api/import/anylist', wrap((req, res) => {
 }));
 app.get('/api/import/anylist/status', (req, res) => res.json(jobFor(req.user).status()));
 
+/* ---------- recipes saved without a picture ---------- */
+const myRecipeIds = (req) => new Set(store.list().filter((r) => acc.canAccess(me(req), r)).map((r) => r.id));
+app.get('/api/photos/status', (req, res) => res.json({ ...photos.status(myRecipeIds(req)), enabled: process.env.PHOTO_CHECK !== 'false' }));
+app.post('/api/photos/check', wrap((req, res) => {
+  if (photos.running) throw fail(409, 'A photo search is already running');
+  photos.run({ force: true, ids: myRecipeIds(req), max: 100 }).catch(() => {});
+  res.status(202).json({ started: true });
+}));
+app.post('/api/recipes/:id/find-photo', wrap(async (req, res) => {
+  const r = recipeFor(req);
+  if (r.image) return res.json(recipeView(req, r));
+  if (!/^https?:\/\//.test(r.sourceUrl || '')) throw fail(422, 'This recipe has no source link to look for a picture');
+  try { res.json(recipeView(req, await photos.tryOne(r.id))); } catch (e) { throw fail(422, e.message); }
+}));
+
 /* ---------- self-update (see launcher.js) ---------- */
 app.get('/api/update/status', (_req, res) => {
   let st = {};
@@ -258,7 +299,8 @@ app.get('/api/lists', wrap((req, res) => {
 app.post('/api/lists', wrap((req, res) => {
   const name = str(req.body?.name, 80).trim();
   if (!name) throw fail(400, 'Missing name');
-  res.json(listView(req, lists.createList(me(req), name, myShare(req))));
+  const l = lists.createList(me(req), name, myShare(req));
+  res.json(listView(req, req.body?.icon || req.body?.color ? lists.settings(l.id, { icon: req.body.icon, color: req.body.color }) : l));
 }));
 app.delete('/api/lists/:id', wrap((req, res) => {
   const l = listFor(req);
@@ -301,6 +343,9 @@ const mealView = (req, m) => {
   const canRecipe = r && acc.canAccess(me(req), r);
   return {
     ...m, mine: m.owner === me(req), ownerName: nameOf(m.owner), sharedWith: shareView(m),
+    // Everyone invited by name (not whole households), so each person sees who else is at the table.
+    attendees: [m.owner, ...(m.users || [])].filter((id, n, a) => a.indexOf(id) === n && acc.user(id)).map((id) => ({ id, name: nameOf(id), avatar: acc.avatarUrl(acc.user(id)), you: id === me(req) })),
+    householdNames: (m.households || []).map((h) => acc.household(h)).filter((h) => h?.members.includes(me(req))).map((h) => h.name),
     recipe: canRecipe ? { id: r.id, title: r.title, image: r.image || null, yield: r.yield || null } : null,
     title: m.title || (canRecipe ? r.title : ''),
   };
@@ -374,9 +419,11 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message }));
 
 if (require.main === module) {
+  if (process.env.PHOTO_CHECK !== 'false') photos.start();
   app.listen(cfg.port, '0.0.0.0', () =>
     console.log(`Simmer listening on :${cfg.port} (data: ${cfg.dataDir}, AI: ${cfg.anthropicKey ? 'on' : 'off'}, users: ${acc.db.users.length})`)
   );
 }
 module.exports = app;
 module.exports.cfg = cfg;
+module.exports.photos = photos;

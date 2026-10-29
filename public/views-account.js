@@ -59,6 +59,8 @@
         <div class="cols">
           <section class="panel stack">
             <h2 class="sec">${t('acct.profile')}</h2>
+            <div class="photorow">${S.avatar(me, 84)}<div class="stack"><div class="row"><button type="button" id="ph">${ic('camera')} ${t('acct.photoChange')}</button>${me.avatar ? `<button type="button" id="phx" class="quiet">${t('acct.photoRemove')}</button>` : ''}</div>
+              <small class="muted">${t('acct.photoHelp')}</small><p id="phm" hidden></p><input id="phf" type="file" accept="image/*" hidden></div></div>
             <form id="pf"><label for="pn">${t('auth.name')}</label><input id="pn" value="${esc(me.name)}" required>
               <p class="muted" style="margin:6px 0 0">@${esc(me.username)}${me.admin ? ` · ${t('acct.admin')}` : ''}</p>
               <p id="pfm" hidden></p>
@@ -75,7 +77,7 @@
             ${me.households.map((h) => `
               <div class="hh" data-h="${h.id}">
                 <div class="row between"><b>${esc(h.name)}</b>${h.mine ? `<span class="chip">${t('acct.owner')}</span>` : ''}</div>
-                <div class="chips">${h.members.map((m) => `<span class="chip soft">${esc(m.id === me.id ? t('acct.you') : m.name)}${h.mine && m.id !== me.id ? ` <button class="xs" data-rm="${m.id}" aria-label="${esc(t('acct.remove'))} ${esc(m.name)}">×</button>` : ''}</span>`).join('')}</div>
+                <div class="chips">${h.members.map((m) => `<span class="chip soft">${S.avatar(m, 22)}${esc(m.id === me.id ? t('acct.you') : m.name)}${h.mine && m.id !== me.id ? ` <button class="xs" data-rm="${m.id}" aria-label="${esc(t('acct.remove'))} ${esc(m.name)}">×</button>` : ''}</span>`).join('')}</div>
                 <div class="row">
                   <select data-add aria-label="${esc(t('acct.pick'))}"><option value="">${t('acct.pick')}</option>${S.people.filter((p) => !h.members.some((m) => m.id === p.id)).map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
                   <button data-addbtn>${t('acct.add')}</button>
@@ -120,6 +122,12 @@
     const wire = () => {
       const app = S.app;
       $('#pf').onsubmit = async (e) => { e.preventDefault(); try { await S.put('/api/me', { name: $('#pn').value }); flash($('#pfm'), t('acct.saved')); await S.refreshMe(); S.chrome?.(); } catch (x) { flash($('#pfm'), x.message, true); } };
+      $('#ph').onclick = () => $('#phf').click();
+      $('#phf').onchange = async (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        try { await S.put('/api/me/avatar', { image: await S.squarePhoto(f) }); await reload(); S.chrome?.(); } catch (x) { flash($('#phm'), x.name === 'InvalidStateError' || !x.message ? t('acct.photoBad') : x.message, true); }
+      };
+      $('#phx')?.addEventListener('click', async () => { await S.del('/api/me/avatar'); await reload(); S.chrome?.(); });
       $('#out').onclick = async () => { await S.post('/api/auth/logout'); S.boot(); };
       $('#pw').onsubmit = async (e) => {
         e.preventDefault();
