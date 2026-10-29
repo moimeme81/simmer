@@ -35,6 +35,7 @@
       try {
         if (kind === 'setup') await S.post('/api/auth/setup', b);
         else if (kind === 'join') await S.post('/api/auth/register', { ...b, invite: code });
+        else if (S.embedded) S.setEmbedToken(await S.post('/api/auth/login', { ...b, asToken: true }));
         else await S.post('/api/auth/login', b);
         if (kind === 'join') history.replaceState(null, '', '#/');
         S.boot();
@@ -137,7 +138,7 @@
       $('#installBtn')?.addEventListener('click', async () => { const p = S.installPrompt; if (!p) return; p.prompt(); await p.userChoice.catch(() => {}); S.installPrompt = null; draw(); });
       $('#un').onchange = async () => { const units = {}; $('#un').querySelectorAll('select').forEach((x) => (units[x.dataset.k] = x.value)); await S.put('/api/me', { units }); await S.refreshMe(); Object.assign(me, S.me); };
       $('#cs').onchange = async (e) => { await S.put('/api/me', { cookStyle: e.target.value }); await S.refreshMe(); Object.assign(me, S.me); };
-      $('#out').onclick = async () => { await S.post('/api/auth/logout'); S.boot(); };
+      $('#out').onclick = async () => { const e = S.embedToken(); if (e?.tokenId) await S.del('/api/tokens/' + e.tokenId).catch(() => {}); S.setEmbedToken(null); await S.post('/api/auth/logout'); S.boot(); };
       $('#pw').onsubmit = async (e) => {
         e.preventDefault();
         try { await S.put('/api/me', { currentPassword: $('#pc').value, newPassword: $('#pnw').value }); $('#pw').reset(); flash($('#pwm'), t('acct.saved')); } catch (x) { flash($('#pwm'), x.message, true); }

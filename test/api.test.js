@@ -202,7 +202,7 @@ test('profile photos: upload, serve to signed-in people only, remove', async () 
   assert.match(up.json.avatar, /^\/avatars\/[\w-]{36}\?v=\d+$/);
   assert.equal((await sis.get('/api/people')).json.find((p) => p.name === 'Chris').avatar, up.json.avatar);
   const bytes = await fetch(base + up.json.avatar.split('?')[0], { headers: { cookie: (await sis.call('GET', '/api/me')) && '' } });
-  assert.equal(bytes.status, 401, 'not signed in');
+  assert.equal(bytes.status, 200, 'profile photos are served by unguessable link, like recipe photos');
   // sis is signed in through her own cookie jar: use the client to fetch the file
   const withCookie = await sisFetch(up.json.avatar);
   assert.equal(withCookie.status, 200);
@@ -249,8 +249,8 @@ test('photo finder: fills in missing pictures from the source page and retries f
     const r = await chris.post(`/api/recipes/${gone}/find-photo`);
     assert.equal(r.status, 422);
     assert.match(r.json.error, /HTTP 404/);
-    // Images are private to signed-in people.
-    assert.equal((await fetch(base + (await get(og)).image)).status, 401);
+    // Photos are served by unguessable link, so pages without a login cookie (the Home Assistant panel) can show them.
+    assert.equal((await fetch(base + (await get(og)).image)).status, 200);
   } finally { site.close(); }
 });
 
@@ -391,6 +391,20 @@ test('Home Assistant helpers: recipe search, random pick and counts in the summa
   const sum = (await chris.get('/api/ha/summary')).json;
   assert.ok(sum.recipes.total >= 2);
   assert.ok(sum.recipes.collections.some((c) => c.name === 'Desserts' && c.count === 1));
+});
+
+test('embedded pages can sign in with an app token instead of a cookie, and photos load without one', async () => {
+  const r = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'chris', password: 'correct horse', asToken: true }) });
+  const j = await r.json();
+  assert.equal(r.headers.get('set-cookie'), null, 'no cookie is set');
+  assert.match(j.token, /^smr_/);
+  const me = await (await fetch(base + '/api/me', { headers: { authorization: 'Bearer ' + j.token } })).json();
+  assert.equal(me.username, 'chris');
+  const tokens = (await chris.get('/api/tokens')).json;
+  assert.ok(tokens.some((t) => t.id === j.tokenId && /Embedded app/.test(t.name)), 'listed so it can be revoked');
+  await chris.call('DELETE', '/api/tokens/' + j.tokenId);
+  assert.equal((await fetch(base + '/api/me', { headers: { authorization: 'Bearer ' + j.token } })).status, 401, 'revoked');
+  assert.equal((await fetch(base + '/images/' + '0'.repeat(8) + '.jpg')).status, 404, 'photos need no sign-in (unguessable links), unknown ones are just missing');
 });
 
 test('the page revalidates and script URLs are fingerprinted so caches cannot serve an old version', async () => {

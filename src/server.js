@@ -50,6 +50,7 @@ app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
 /* ---------- authentication ---------- */
 const COOKIE = 'simmer_sid';
+const EMBED_TOKEN = 'Embedded app (Home Assistant panel)';
 const cookieOf = (req, name) => (req.headers.cookie || '').split(';').map((c) => c.trim().split('=')).find(([k]) => k === name)?.[1];
 const bearerOf = (req) => (/^Bearer (.+)$/i.exec(req.headers.authorization || '') || [])[1];
 const secure = (req) => req.secure || req.headers['x-forwarded-proto'] === 'https';
@@ -91,6 +92,16 @@ app.post('/api/auth/setup', wrap((req, res) => {
 }));
 app.post('/api/auth/login', wrap((req, res) => {
   const { token } = acc.login(str(req.body?.username, 80), str(req.body?.password, 500), req.ip);
+  if (req.body?.asToken) {
+    // Pages embedded in another site (the Home Assistant panel) often cannot keep a login cookie, so they get an app token instead.
+    // It shows up under Account -> API tokens and can be revoked there; only the newest 10 are kept.
+    const uid = acc.resolve({ cookie: token }).user.id;
+    acc.endSession(token);
+    const mine = acc.listTokens(uid).filter((t) => t.name === EMBED_TOKEN);
+    mine.slice(0, Math.max(0, mine.length - 9)).forEach((t) => acc.deleteToken(uid, t.id));
+    const secret = acc.createToken(uid, EMBED_TOKEN);
+    return res.json({ ok: true, token: secret, tokenId: acc.listTokens(uid).find((t) => t.name === EMBED_TOKEN && !mine.some((m) => m.id === t.id))?.id });
+  }
   setCookie(req, res, token);
   res.json({ ok: true });
 }));
@@ -124,11 +135,11 @@ app.put('/api/me/avatar', wrap((req, res) => {
   res.json({ avatar: acc.avatarUrl(acc.user(me(req))) });
 }));
 app.delete('/api/me/avatar', (req, res) => { clearAvatarFiles(me(req)); acc.setAvatar(me(req), null); res.json({ ok: true }); });
-app.get('/avatars/:id', need, (req, res, next) => {
+app.get('/avatars/:id', (req, res, next) => {
   if (!/^[a-f0-9-]{36}$/.test(req.params.id)) return next(notFound());
   const file = AVATAR_EXT.map((e) => path.join(avatarDir, `${req.params.id}.${e}`)).find((f) => fs.existsSync(f));
   if (!file) return next(notFound());
-  res.set('Cache-Control', 'private, max-age=31536000, immutable').sendFile(file);
+  res.set('Cache-Control', 'public, max-age=31536000, immutable').sendFile(file);
 });
 
 app.get('/api/tokens', (req, res) => res.json(acc.listTokens(me(req))));
@@ -537,7 +548,7 @@ app.get('/api/ha/summary', (req, res) => {
   });
 });
 
-app.use('/images', need, express.static(store.imageDir, { maxAge: '30d', immutable: true }));
+app.use('/images', express.static(store.imageDir, { maxAge: '30d', immutable: true }));
 /* The page and its scripts always revalidate, and each script URL carries a fingerprint of the files, so a proxy
  * or browser cache (Nginx Proxy Manager's "Cache assets", for instance) can never keep serving an old version. */
 const PUBLIC = path.join(__dirname, '..', 'public');

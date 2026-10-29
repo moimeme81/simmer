@@ -14,8 +14,17 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+  // Embedded in another site (the Home Assistant panel) the browser may refuse the login cookie, so there the
+  // page signs in with an app token it keeps in its own storage and sends as a header.
+  const KEY = 'simmer-embed-token';
+  const mem = {};
+  const store = (fn) => { try { return fn(localStorage); } catch { try { return fn(sessionStorage); } catch { return fn({ getItem: (k) => mem[k] ?? null, setItem: (k, v) => (mem[k] = v), removeItem: (k) => delete mem[k] }); } } };
+  S.embedded = (() => { try { return window.self !== window.top; } catch { return true; } })();
+  S.embedToken = () => (S.embedded ? JSON.parse(store((b) => b.getItem(KEY)) || 'null') : null);
+  S.setEmbedToken = (v) => store((b) => (v ? b.setItem(KEY, JSON.stringify(v)) : b.removeItem(KEY)));
   const api = async (url, opts) => {
-    const r = await fetch(url, opts && { ...opts, headers: { 'content-type': 'application/json' }, body: opts.body && JSON.stringify(opts.body) });
+    const tok = S.embedToken()?.token;
+    const r = await fetch(url, (opts || tok) && { ...opts, headers: { ...(opts && { 'content-type': 'application/json' }), ...(tok && { authorization: 'Bearer ' + tok }) }, body: opts?.body && JSON.stringify(opts.body) });
     const j = await r.json().catch(() => ({}));
     if (r.status === 401 && !url.startsWith('/api/auth/')) { S.onSignedOut?.(); throw new Error(I18n.err(j.error || 'Sign in required')); }
     if (!r.ok) throw new Error(I18n.err(j.error || r.statusText));
