@@ -8,7 +8,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/moimeme81/simmer/issues</Support>
   <Project>https://github.com/moimeme81/simmer</Project>
-  <Overview>Self-hosted recipe saver. Paste a link and get a clean, ad-free, step-by-step recipe with a cook mode. Works out of the box on any site with standard recipe markup; add an Anthropic API key to also extract recipes from pages and video descriptions without it.</Overview>
+  <Overview>Self-hosted recipes, shopping lists and meal plan for your family. Paste a link for a clean recipe with cook mode and timers, plan the week or month, and shop from lists sorted by aisle. Bilingual (English and Quebec French), installable on phones, with a Home Assistant integration and import/export for AnyList, Mealie and Paprika. Add an Anthropic API key to also read pages without standard recipe markup.</Overview>
   <Category>Tools: Productivity: HomeAutomation:</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/moimeme81/simmer/main/unraid/simmer.xml</TemplateURL>

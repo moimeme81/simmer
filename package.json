@@ -1,11 +1,12 @@
 {
   "name": "simmer",
-  "version": "1.0.0",
-  "description": "Self-hosted recipe extractor: paste a link, get a clean, cook-friendly recipe.",
+  "version": "1.5.0",
+  "description": "Self-hosted recipes, shopping lists and meal plan for your family, with Home Assistant integration and import/export (AnyList, Mealie, Paprika).",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "dev": "DATA_DIR=./data node --watch src/server.js"
   },
   "engines": {
     "node": ">=20"
@@ -15,5 +16,23 @@
     "anylist": "0.8.6",
     "cheerio": "1.0.0",
     "express": "4.21.2"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moimeme81/simmer.git"
+  },
+  "homepage": "https://github.com/moimeme81/simmer#readme",
+  "bugs": {
+    "url": "https://github.com/moimeme81/simmer/issues"
+  },
+  "keywords": [
+    "recipes",
+    "self-hosted",
+    "meal-plan",
+    "shopping-list",
+    "home-assistant",
+    "mealie",
+    "anylist",
+    "unraid"
+  ]
 }
