@@ -246,7 +246,7 @@
     [/page has no picture/i, { en: null, fr: 'Cette page n’a pas d’image.' }],
     [/picture could not be downloaded/i, { en: null, fr: 'L’image n’a pas pu être téléchargée.' }],
     [/picture is not a JPEG/i, { en: null, fr: 'L’image n’est pas un JPEG, PNG ou WebP.' }],
-    [/could not reach the image search/i, { en: null, fr: 'Simmer ne peut pas joindre la recherche d’images. Vérifiez la connexion Internet du serveur.' }],
+    [/could not reach the image search (\([^)]*\))/i, { en: null, fr: 'Simmer ne peut pas joindre la recherche d’images $1. Vérifiez la connexion Internet et le DNS du serveur.' }],
     [/Too many searches/i, { en: null, fr: 'Trop de recherches. Attendez un instant.' }],
     [/did not give a JPEG/i, { en: null, fr: 'Ce lien n’a pas donné une image JPEG, PNG ou WebP.' }],
     [/Not found/i, { en: null, fr: 'Introuvable.' }],

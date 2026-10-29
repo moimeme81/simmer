@@ -8,9 +8,11 @@ const COMMONS = 'https://commons.wikimedia.org/w/api.php';
 const UA = { 'user-agent': 'Simmer/1.0 (self-hosted recipe app; https://github.com/moimeme81/simmer)', accept: 'application/json' };
 
 async function getJson(url) {
-  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(12000) });
+  let res;
+  try { res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(12000) }); }
+  catch (e) { throw new Error(e.name === 'TimeoutError' ? 'timed out' : String(e.cause?.code || e.cause?.message || e.message)); }   // e.g. ENOTFOUND = DNS cannot find the site
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  try { return await res.json(); } catch { throw new Error('unreadable reply'); }
 }
 const httpUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : null);
 
@@ -45,7 +47,8 @@ async function searchImages(q) {
   const results = [], seen = new Set();
   const max = Math.max(...settled.map((s) => (s.status === 'fulfilled' ? s.value.length : 0)), 0);
   for (let n = 0; n < max; n++) for (const s of settled) { const r = s.status === 'fulfilled' && s.value[n]; if (r && !seen.has(r.url)) { seen.add(r.url); results.push(r); } }
-  return { results, errors: settled.filter((s) => s.status === 'rejected').map((s) => String(s.reason?.message || s.reason)) };
+  const names = process.env.IMAGE_SEARCH_URL ? ['Custom'] : ['Openverse', 'Wikimedia Commons'];
+  return { results, errors: settled.map((s, n) => (s.status === 'rejected' ? `${names[n]}: ${String(s.reason?.message || s.reason)}` : null)).filter(Boolean) };
 }
 
 module.exports = { searchImages };
