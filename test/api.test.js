@@ -309,3 +309,23 @@ test('recipe collections can be ordered, renamed (merging) and deleted', async (
   assert.deepEqual((await chris.get('/api/me')).json.collections, ['Rapide', 'Vide']);
   assert.equal(r.status, 200);
 });
+
+test('recipes can be created by hand, edited, and their picture replaced', async () => {
+  const made = (await chris.post('/api/recipes', { title: 'Mamie’s tarte', ingredients: ['2 tasses farine', ' ', '1 oeuf'], steps: ['Mélanger', 'Cuire 30 minutes'], yield: '8 portions', prepMinutes: '15', cookMinutes: 30 })).json;
+  assert.equal(made.ingredients.length, 2); assert.equal(made.prepMinutes, 15); assert.equal(made.method, 'manual');
+  assert.equal((await chris.post('/api/recipes', { title: '  ' })).status, 400);
+  const edited = (await chris.put('/api/recipes/' + made.id, { title: 'Tarte', ingredients: ['3 tasses farine'], sourceUrl: 'https://example.com/x', prepMinutes: '', description: 'Bonne' })).json;
+  assert.deepEqual([edited.title, edited.ingredients, edited.prepMinutes, edited.host, edited.description], ['Tarte', ['3 tasses farine'], null, 'example.com', 'Bonne']);
+  assert.equal((await chris.put('/api/recipes/' + made.id, { sourceUrl: 'javascript:alert(1)' })).status, 400);
+  assert.equal((await chris.put('/api/recipes/' + made.id, { title: '' })).status, 400);
+  const a = (await chris.put(`/api/recipes/${made.id}/image`, { image: PNG })).json;
+  assert.match(a.image, /^\/images\/[\w-]+\.png\?v=\d+$/);
+  assert.equal((await chris.put(`/api/recipes/${made.id}/image`, { image: 'bm90IGFuIGltYWdl' })).status, 400);
+  assert.equal((await chris.del(`/api/recipes/${made.id}/image`)).json.image, null);
+  // Guests can add notes but not edit.
+  const sisId = (await sis.get('/api/me')).json.id;
+  await chris.put(`/api/recipes/${made.id}/share`, { users: [sisId], households: [] });
+  const g = (await sis.put('/api/recipes/' + made.id, { title: 'Hacked', notes: 'ok' })).json;
+  assert.deepEqual([g.title, g.notes], ['Tarte', 'ok']);
+  assert.equal((await sis.put(`/api/recipes/${made.id}/image`, { image: PNG })).status, 403);
+});

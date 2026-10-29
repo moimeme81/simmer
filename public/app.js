@@ -93,6 +93,7 @@ async function home() {
     <div class="finder">
       <form class="field" id="imp"><input type="url" required placeholder="${esc(t('home.placeholder'))}" aria-label="${esc(t('home.placeholder'))}"><button class="primary">${t('home.import')}</button></form>
       <div class="err" id="imperr" hidden></div>
+      <div class="row" style="margin-bottom:8px"><button id="newRecipe" type="button">${ic('plus')} ${t('home.new')}</button></div>
       <div class="field"><input type="search" id="q" placeholder="${esc(t('home.search'))}" aria-label="${esc(t('home.search'))}"></div>
     </div>
     <div class="chips filters" id="cols" role="group" aria-label="${esc(t('col.title'))}"></div>
@@ -104,6 +105,7 @@ async function home() {
     try { const r = await api('/api/import', { method: 'POST', body: { url: $('input', form).value } }); location.hash = '#/r/' + r.id; }
     catch (x) { err.textContent = x.message; err.hidden = false; btn.disabled = false; btn.textContent = t('home.import'); }
   };
+  $('#newRecipe').onclick = () => S.recipeEditor(null, (r) => (location.hash = '#/r/' + r.id));
   const all = await api('/api/recipes');
   let col = ''; try { col = localStorage.getItem('simmer-col') || ''; } catch { /* private mode */ }
   const names = () => {
@@ -193,7 +195,7 @@ async function recipe(id, opts = {}) {
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
     <div class="chips colrow" id="colrow"></div>
     <div class="facts" id="facts"></div>
-    <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
+    <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="editBtn">${ic('edit')} ${t('recipe.edit')}</button><button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
     <p class="muted sharedline" id="sharedline">${esc(r.mine ? S.shareText(r) : t('recipe.guest', { name: r.ownerName }))}</p>
     <div class="rbody">
       <aside><h2 class="sec">${t('recipe.ingredients')}</h2><div class="scaler" id="scaler"></div><ul class="ing" id="ing"></ul></aside>
@@ -213,7 +215,7 @@ async function recipe(id, opts = {}) {
   const draw = () => {
     factor = base ? target / base : factor;
     $('#facts').innerHTML = facts().map(([k, v]) => `<div class="fact"><span>${k}</span><b>${esc(v)}</b></div>`).join('') +
-      `<div class="src">${t('recipe.from')} ${r.sourceUrl ? `<a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.host)}</a>` : esc(r.host)}</div>`;
+      (r.host || r.sourceUrl ? `<div class="src">${t('recipe.from')} ${r.sourceUrl ? `<a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.host)}</a>` : esc(r.host)}</div>` : '');
     drawCook();
     const box = $('#scaler');
     if (base) {
@@ -252,6 +254,7 @@ async function recipe(id, opts = {}) {
   drawCols();
 
   let tm; $('#notes').oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => api('/api/recipes/' + id, { method: 'PUT', body: { notes: e.target.value } }), 600); };
+  $('#editBtn')?.addEventListener('click', () => S.recipeEditor(r, () => recipe(id, opts)));
   $('#del')?.addEventListener('click', async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } });
   $('#toPlan').onclick = () => S.mealSheet({ recipe: r, date: S.ymd(new Date()) }, () => { $('#toPlan').textContent = t('share.save') + ' ✓'; });
   $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));

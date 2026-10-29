@@ -43,7 +43,7 @@ app.disable('x-powered-by');
 // Bulk-import endpoints carry photos as base64, so they get a larger body limit.
 const small = express.json({ limit: '1mb' });
 const big = express.json({ limit: '25mb' });
-app.use((req, res, next) => (req.path.startsWith('/api/import/') && req.path !== '/api/import/' ? big : small)(req, res, next));
+app.use((req, res, next) => ((req.path.startsWith('/api/import/') && req.path !== '/api/import/') || /^\/api\/recipes\/[\w-]+\/image$/.test(req.path) ? big : small)(req, res, next));
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
 /* ---------- authentication ---------- */
@@ -166,11 +166,53 @@ const recipeFor = (req) => { const r = store.get(req.params.id); if (!r || !acc.
 
 app.get('/api/recipes', (req, res) => res.json(store.list().filter((r) => acc.canAccess(me(req), r)).map((r) => recipeView(req, r))));
 app.get('/api/recipes/:id', wrap((req, res) => res.json(recipeView(req, recipeFor(req)))));
+/** Fields a person can type into the recipe editor, cleaned. Only fields present in the body are returned. */
+const cleanRecipeFields = (b) => {
+  const out = {}, has = (k) => b && k in b;
+  const minutes = (v) => (Number.isFinite(+v) && +v > 0 && v !== '' ? Math.min(Math.round(+v), 100000) : null);
+  if (has('title')) { out.title = str(b.title, 300).trim(); if (!out.title) throw fail(400, 'Enter a title'); }
+  if (has('description')) out.description = str(b.description, 3000).trim();
+  if (has('yield')) out.yield = str(b.yield, 100).trim() || null;
+  for (const k of ['prepMinutes', 'cookMinutes', 'totalMinutes']) if (has(k)) out[k] = minutes(b[k]);
+  if (has('ingredients')) out.ingredients = strArr(b.ingredients);
+  if (has('steps')) out.steps = strArr(b.steps);
+  if (has('notes')) out.notes = str(b.notes, 10000);
+  if (has('rating')) out.rating = minutes(b.rating) ? Math.min(5, minutes(b.rating)) : null;
+  if (has('collections')) out.collections = cleanCollections(b.collections);
+  if (has('sourceUrl')) {
+    const u = str(b.sourceUrl, 2000).trim();
+    if (u && !/^https?:\/\//i.test(u)) throw fail(400, 'The source link must start with http:// or https://');
+    out.sourceUrl = u || null;
+    try { out.host = u ? new URL(u).hostname.replace(/^www\./, '') : ''; } catch { throw fail(400, 'Invalid URL'); }
+  }
+  return out;
+};
+app.post('/api/recipes', wrap((req, res) => {
+  const f = cleanRecipeFields(req.body);
+  if (!f.title) throw fail(400, 'Enter a title');
+  res.json(recipeView(req, store.create({ ingredients: [], steps: [], description: '', author: null, yield: null, prepMinutes: null, cookMinutes: null, totalMinutes: null, sourceUrl: null, host: '', method: 'manual', image: null, ...f, owner: me(req), ...myShare(req) })));
+}));
 app.put('/api/recipes/:id', wrap((req, res) => {
   const r = recipeFor(req);
-  const patch = r.owner === me(req) ? { ...(req.body || {}) } : { notes: req.body?.notes }; // guests can only add notes
-  if ('collections' in patch) patch.collections = cleanCollections(patch.collections);
-  res.json(recipeView(req, store.update(r.id, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)))));
+  const patch = r.owner === me(req) ? cleanRecipeFields(req.body) : { notes: str(req.body?.notes, 10000) }; // guests can only add notes
+  res.json(recipeView(req, store.update(r.id, patch)));
+}));
+app.put('/api/recipes/:id/image', wrap((req, res) => {
+  const r = recipeFor(req);
+  if (r.owner !== me(req)) throw fail(403, 'Only the owner can change the picture');
+  const buf = Buffer.from(str(req.body?.image, 5_000_000), 'base64');
+  const img = buf.length > 12 && buf.length <= 3_500_000 ? store.saveImage(r.id, buf) : null;
+  if (!img) throw fail(400, 'Use a JPEG, PNG or WebP picture under 3 MB');
+  const { imageCheck, ...cur } = store.get(r.id);
+  store.write({ ...cur, image: img });
+  res.json(recipeView(req, store.get(r.id)));
+}));
+app.delete('/api/recipes/:id/image', wrap((req, res) => {
+  const r = recipeFor(req);
+  if (r.owner !== me(req)) throw fail(403, 'Only the owner can change the picture');
+  store.removeImage(r.id);
+  store.write({ ...store.get(r.id), image: null });
+  res.json(recipeView(req, store.get(r.id)));
 }));
 app.put('/api/recipes/:id/share', wrap((req, res) => {
   const r = recipeFor(req);

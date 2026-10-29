@@ -68,6 +68,9 @@
   // Accounts, sharing, aisles, stores, meal plan.
   const MORE = {
     en: {
+      'recipe.edit': 'Edit', 'home.new': 'Write a recipe', 'edit.title': 'Edit recipe', 'edit.newTitle': 'New recipe', 'edit.titleField': 'Title', 'edit.photo': 'Photo', 'edit.choose': 'Choose a photo', 'edit.remove': 'Remove photo',
+      'edit.description': 'Description', 'edit.servings': 'Servings', 'edit.servingsPh': '4 servings', 'edit.source': 'Source link', 'edit.ingredientsHelp': 'One ingredient per line, for example “2 cups (500 ml) milk”. Both measurements scale together.',
+      'edit.stepsHelp': 'One step per line. Times such as “10 minutes” become tap-to-start timers.',
       'lists.categories': 'Categories', 'lists.categoriesHelp': 'These belong to this list only. Items are grouped under them in this order.', 'lists.auto': 'Recognise grocery items and file them in the matching aisle',
       'lists.categoryName': 'Category name', 'lists.newCategory': 'New category', 'lists.addCategory': 'Add category', 'lists.noCategories': 'No categories: items show in one plain list.', 'lists.noCategory': 'No category', 'lists.uncat': 'No category',
       'lists.template': 'Start over from a template…', 'lists.applyTemplate': 'Replace categories', 'lists.confirmTemplate': 'Replace this list’s categories with “{name}”? Items are kept but become uncategorised.', 'lists.kind': 'Kind of list',
@@ -134,6 +137,9 @@
       'aisle.personal': 'Personal care', 'aisle.pets': 'Pets', 'aisle.other': 'Other',
     },
     fr: {
+      'recipe.edit': 'Modifier', 'home.new': 'Écrire une recette', 'edit.title': 'Modifier la recette', 'edit.newTitle': 'Nouvelle recette', 'edit.titleField': 'Titre', 'edit.photo': 'Photo', 'edit.choose': 'Choisir une photo', 'edit.remove': 'Retirer la photo',
+      'edit.description': 'Description', 'edit.servings': 'Portions', 'edit.servingsPh': '4 portions', 'edit.source': 'Lien source', 'edit.ingredientsHelp': 'Un ingrédient par ligne, par exemple « 2 tasses (500 ml) de lait ». Les deux mesures sont ajustées ensemble.',
+      'edit.stepsHelp': 'Une étape par ligne. Les durées comme « 10 minutes » deviennent des minuteries à démarrer d’un toucher.',
       'lists.categories': 'Catégories', 'lists.categoriesHelp': 'Elles appartiennent à cette liste seulement. Les articles sont regroupés dessous dans cet ordre.', 'lists.auto': 'Reconnaître les produits d’épicerie et les classer dans le bon rayon',
       'lists.categoryName': 'Nom de la catégorie', 'lists.newCategory': 'Nouvelle catégorie', 'lists.addCategory': 'Ajouter la catégorie', 'lists.noCategories': 'Aucune catégorie : les articles s’affichent dans une seule liste.', 'lists.noCategory': 'Sans catégorie', 'lists.uncat': 'Sans catégorie',
       'lists.template': 'Repartir d’un modèle…', 'lists.applyTemplate': 'Remplacer les catégories', 'lists.confirmTemplate': 'Remplacer les catégories de cette liste par « {name} » ? Les articles sont conservés mais n’ont plus de catégorie.', 'lists.kind': 'Type de liste',
@@ -222,13 +228,15 @@
     [/Password must be at least 8/i, { en: null, fr: 'Le mot de passe doit contenir au moins 8 caractères.' }],
     [/Current password is wrong/i, { en: null, fr: 'Le mot de passe actuel est incorrect.' }],
     [/invite link is invalid/i, { en: null, fr: 'Ce lien d’invitation est invalide ou expiré.' }],
+    [/Enter a title/i, { en: null, fr: 'Entrez un titre.' }],
+    [/source link must start/i, { en: null, fr: 'Le lien source doit commencer par http:// ou https://.' }],
     [/Enter a name/i, { en: null, fr: 'Entrez un nom.' }],
     [/Only the owner/i, { en: null, fr: 'Seul le propriétaire peut faire cela.' }],
     [/Only the household owner/i, { en: null, fr: 'Seul le propriétaire du foyer peut retirer d’autres membres.' }],
     [/Pick a recipe or type a name/i, { en: null, fr: 'Choisissez une recette ou écrivez un nom.' }],
     [/Pick a date/i, { en: null, fr: 'Choisissez une date.' }],
     [/Cross-site request/i, { en: null, fr: 'Requête refusée.' }],
-    [/Use a JPEG, PNG or WebP/i, { en: null, fr: 'Utilisez une image JPEG, PNG ou WebP de moins de 1 Mo.' }],
+    [/Use a JPEG, PNG or WebP/i, { en: null, fr: 'Utilisez une image JPEG, PNG ou WebP de taille raisonnable.' }],
     [/photo search is already running/i, { en: null, fr: 'Une recherche de photos est déjà en cours.' }],
     [/no source link/i, { en: null, fr: 'Cette recette n’a pas de lien source où chercher une photo.' }],
     [/page has no picture/i, { en: null, fr: 'Cette page n’a pas d’image.' }],

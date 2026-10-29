@@ -55,7 +55,7 @@ class Store {
     const cur = this.get(id);
     if (!cur) return null;
     const next = { ...cur };
-    for (const k of ['title', 'notes', 'ingredients', 'steps', 'yield', 'rating', 'collections']) if (k in patch) next[k] = patch[k];
+    for (const k of ['title', 'notes', 'ingredients', 'steps', 'yield', 'rating', 'collections', 'description', 'prepMinutes', 'cookMinutes', 'totalMinutes', 'sourceUrl', 'host']) if (k in patch) next[k] = patch[k];
     this.write(next);
     return next;
   }
@@ -63,7 +63,7 @@ class Store {
     const cur = this.get(id);
     if (!cur) return false;
     fs.unlinkSync(this.file(id));
-    if (cur.image?.startsWith('/images/')) fs.rmSync(path.join(this.imageDir, path.basename(cur.image)), { force: true });
+    if (cur.image?.startsWith('/images/')) fs.rmSync(path.join(this.imageDir, path.basename(cur.image.split('?')[0])), { force: true });
     return true;
   }
   /** Save image bytes for a recipe; returns the public path or null if not a known image type. */
@@ -72,9 +72,12 @@ class Store {
       : buf.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47])) ? 'png'
       : buf.subarray(8, 12).toString() === 'WEBP' ? 'webp' : null;
     if (!ext) return null;
+    for (const e of ['jpg', 'png', 'webp']) if (e !== ext) fs.rmSync(path.join(this.imageDir, `${id}.${e}`), { force: true });
     fs.writeFileSync(path.join(this.imageDir, `${id}.${ext}`), buf);
-    return `/images/${id}.${ext}`;
+    return `/images/${id}.${ext}?v=${Date.now()}`;   // the query makes browsers fetch a replaced picture
   }
+  /** Delete a recipe's picture file. */
+  removeImage(id) { for (const e of ['jpg', 'png', 'webp']) fs.rmSync(path.join(this.imageDir, `${id}.${e}`), { force: true }); }
 }
 
 /* ---------- shopping lists ---------- */
