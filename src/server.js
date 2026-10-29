@@ -130,17 +130,29 @@ const peerAuth = (req, _res, next) => {
 };
 const fedJson = (fn) => wrap(async (req, res) => { try { res.json(await fn(req)); } catch (e) { throw e instanceof FedError ? Object.assign(e, { status: e.status }) : e; } });
 app.get('/api/federation/ping', peerAuth, (req, res) => res.json({ ok: true, simmer: true, as: req.peer.name }));
+app.get('/api/federation/people', peerAuth, (_req, res) => res.json({ people: fed.localDirectory() }));
 app.post('/api/federation/push', peerAuth, fedJson((req) => fed.receivePush(req.peer, req.body || {})));
 app.post('/api/federation/revoke', peerAuth, fedJson((req) => fed.receiveRevoke(req.peer, req.body || {})));
 app.post('/api/federation/declined', peerAuth, fedJson((req) => fed.receiveDeclined(req.peer, req.body || {})));
 app.post('/api/federation/list-op', peerAuth, fedJson((req) => fed.receiveListOp(req.peer, req.body || {})));
+app.post('/api/federation/unlink', peerAuth, fedJson((req) => { fed.removePeer(req.peer.id); return { ok: true }; }));
+// The handshake is signed with this Simmer's own server key, not with a per-link key (none exists yet).
+const serverKeyAuth = (req, _res, next) => {
+  const ip = req.ip, n = badToken.get(ip) || { c: 0, t: Date.now() };
+  if (Date.now() - n.t > 60_000) { n.c = 0; n.t = Date.now(); }
+  if (n.c >= 30) return next(fail(429, 'Too many tries'));
+  if (!fed.isServerKey(bearerOf(req))) { n.c++; badToken.set(ip, n); return next(fail(401, 'That key is not recognised')); }
+  next();
+};
+app.post('/api/federation/link-request', serverKeyAuth, fedJson((req) => fed.receiveLinkRequest(req.body || {})));
+app.post('/api/federation/link-confirm', serverKeyAuth, fedJson((req) => fed.receiveLinkConfirm(req.body || {})));
 
 app.use('/api', (req, res, next) => (req.path.startsWith('/auth/') ? next() : need(req, res, next)));
 
 /* ---------- me, people, tokens, admin ---------- */
-app.get('/api/me', (req, res) => res.json({ ...acc.publicUser(req.user), households: acc.describeHouseholds(me(req)), linkedSimmers: fed.db.peers.length }));
+app.get('/api/me', (req, res) => res.json({ ...acc.publicUser(req.user), households: acc.describeHouseholds(me(req)), linkedSimmers: fed.active().length, ...(req.user.admin ? { pendingLinks: fed.pendingCount() } : {}) }));
 app.put('/api/me', wrap((req, res) => res.json(acc.publicUser(acc.updateProfile(me(req), { ...req.body, keepSession: req.sessionId })))));
-app.get('/api/people', (_req, res) => res.json(acc.people()));
+app.get('/api/people', wrap(async (_req, res) => res.json([...acc.people(), ...(await fed.directory()).map((p) => ({ ...p, remote: true, avatar: null }))])));
 app.get('/api/aisles', (_req, res) => res.json(AISLES));
 
 /* ---------- profile photos ---------- */
@@ -195,8 +207,10 @@ app.delete('/api/households/:id/members/:userId', wrap((req, res) => { if (!acc.
 app.delete('/api/households/:id', wrap((req, res) => { if (!acc.deleteHousehold(me(req), req.params.id)) throw notFound(); res.json({ ok: true }); }));
 
 /* ---------- recipes ---------- */
-const shareView = (o) => ({ users: o.users || [], households: o.households || [] });
-const recipeView = (req, r) => ({ ...r, mine: r.owner === me(req), ownerName: nameOf(r.owner), sharedWith: shareView(r) });
+const shareView = (o, kind) => ({ users: [...(o.users || []), ...(kind ? fed.remoteIds(o.owner, kind, o.id) : [])], households: o.households || [] });
+/** The people on linked Simmers a share request names (ids like r:<link>:<username>). Local sharing ignores them. */
+const remoteIdsOf = (b) => (Array.isArray(b?.users) ? b.users.filter((x) => typeof x === 'string' && x.startsWith('r:')) : []);
+const recipeView = (req, r) => ({ ...r, mine: r.owner === me(req), ownerName: nameOf(r.owner), sharedWith: shareView(r, 'recipe') });
 const recipeFor = (req) => { const r = store.get(req.params.id); if (!r || !acc.canAccess(me(req), r)) throw notFound(); return r; };
 
 app.get('/api/recipes', (req, res) => res.json(store.list().filter((r) => acc.canAccess(me(req), r)).map((r) => recipeView(req, r))));
@@ -278,10 +292,12 @@ app.delete('/api/recipes/:id/image', wrap((req, res) => {
   store.write({ ...cur, image: null });
   res.json(recipeView(req, store.get(r.id)));
 }));
-app.put('/api/recipes/:id/share', wrap((req, res) => {
+app.put('/api/recipes/:id/share', wrap(async (req, res) => {
   const r = recipeFor(req);
   if (r.owner !== me(req)) throw fail(403, 'Only the owner can change sharing');
-  res.json(recipeView(req, store.setShare(r.id, acc.cleanShare(me(req), req.body))));
+  const out = store.setShare(r.id, acc.cleanShare(me(req), req.body));
+  if (!r.remote) await fed.setTargets(req.user, 'recipe', r.id, remoteIdsOf(req.body));
+  res.json(recipeView(req, out));
 }));
 app.delete('/api/recipes/:id', wrap((req, res) => {
   const r = recipeFor(req);
@@ -457,15 +473,19 @@ app.post('/api/exchange/mealie/export', need, wrap((req, res) => {
 app.get('/api/exchange/status', need, (req, res) => res.json(exchFor(req.user).status()));
 
 /* ---------- linked Simmers: setting up (admins) and sharing with people there ---------- */
-app.get('/api/peers', (req, res) => res.json(fed.db.peers.map((p) => fed.peerView(p, !!req.user.admin))));
-app.post('/api/admin/peers', admin, wrap((req, res) => {
-  const p = fed.addPeer(req.body || {}, req.user);
-  res.json({ ...fed.peerView(p, true), secret: p.secret });
-}));
-app.delete('/api/admin/peers/:id', admin, wrap((req, res) => { if (!fed.removePeer(req.params.id)) throw notFound(); res.json({ ok: true }); }));
+app.get('/api/peers', (req, res) => res.json(fed.active().map((p) => fed.peerView(p, false))));
+const selfUrl = (req) => str(req.body?.selfUrl, 300) || `${secure(req) ? 'https' : req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+app.get('/api/admin/federation', admin, (_req, res) => res.json(fed.overview()));
+app.put('/api/admin/federation', admin, wrap((req, res) => { fed.setServerName(req.body?.name); res.json(fed.overview()); }));
+app.post('/api/admin/federation/new-key', admin, wrap((_req, res) => { fed.rotateKey(); res.json(fed.overview()); }));
+app.post('/api/admin/peers', admin, wrap(async (req, res) => { await fed.startLink({ url: str(req.body?.url, 500), key: str(req.body?.key, 500), selfUrl: selfUrl(req) }); res.json(fed.overview()); }));
+app.post('/api/admin/pending/:id/accept', admin, wrap(async (req, res) => { await fed.acceptPending(req.params.id, { key: str(req.body?.key, 500), selfUrl: selfUrl(req) }); res.json(fed.overview()); }));
+app.delete('/api/admin/pending/:id', admin, wrap((req, res) => { if (!fed.declinePending(req.params.id)) throw notFound(); res.json(fed.overview()); }));
+app.delete('/api/admin/peers/:id', admin, wrap(async (req, res) => { if (!(await fed.unlink(req.params.id))) throw notFound(); res.json(fed.overview()); }));
 app.post('/api/admin/peers/:id/test', admin, wrap(async (req, res) => {
   const p = fed.peer(req.params.id);
   if (!p) throw notFound();
+  if (p.state !== 'active') return res.json({ ok: false, error: `Waiting for ${p.name}’s admin to enter your key.` });
   try { await fed.ping(p); res.json({ ok: true }); } catch (e) { res.json({ ok: false, error: e.message }); }
 }));
 app.get('/api/remote-shares', wrap((req, res) => res.json(fed.sharesOf(me(req), str(req.query.kind, 20), str(req.query.ref, 200)).map((s) => fed.shareView(s)))));
@@ -522,7 +542,7 @@ app.post('/api/update/check', admin, (_req, res) => {
 });
 
 /* ---------- shopping lists ---------- */
-const listView = (req, l) => ({ ...l, mine: l.owner === me(req), ownerName: nameOf(l.owner), sharedWith: shareView(l) });
+const listView = (req, l) => ({ ...l, mine: l.owner === me(req), ownerName: nameOf(l.owner), sharedWith: shareView(l, 'list') });
 const listFor = (req) => { const l = lists.get(req.params.id); if (!l || !acc.canAccess(me(req), l)) throw notFound(); return l; };
 
 app.get('/api/list-templates', (req, res) => {
@@ -547,10 +567,12 @@ app.delete('/api/lists/:id', wrap((req, res) => {
   lists.deleteList(l.id);
   res.json({ ok: true });
 }));
-app.put('/api/lists/:id/share', wrap((req, res) => {
+app.put('/api/lists/:id/share', wrap(async (req, res) => {
   const l = listFor(req);
   if (l.owner !== me(req)) throw fail(403, 'Only the owner can change sharing');
-  res.json(listView(req, lists.setShare(l.id, acc.cleanShare(me(req), req.body))));
+  const out = lists.setShare(l.id, acc.cleanShare(me(req), req.body));
+  await fed.setTargets(req.user, 'list', l.id, remoteIdsOf(req.body));
+  res.json(listView(req, out));
 }));
 app.put('/api/lists/:id/settings', wrap((req, res) => { if (listFor(req).remote) throw fail(403, 'This list is shared from another Simmer. Its owner changes its settings.'); res.json(listView(req, lists.settings(req.params.id, req.body || {}))); }));
 /** Add to a list; a list shared from another Simmer is changed on its owner's server, which sends the new list back. */
@@ -601,7 +623,7 @@ const mealView = (req, m) => {
   const r = m.recipeId ? store.get(m.recipeId) : null;
   const canRecipe = r && acc.canAccess(me(req), r);
   return {
-    ...m, mine: m.owner === me(req), ownerName: nameOf(m.owner), sharedWith: shareView(m),
+    ...m, mine: m.owner === me(req), ownerName: nameOf(m.owner), sharedWith: shareView(m, 'meal'),
     // Everyone invited by name (not whole households), so each person sees who else is at the table.
     attendees: [m.owner, ...(m.users || [])].filter((id, n, a) => a.indexOf(id) === n && acc.user(id)).map((id) => ({ id, name: nameOf(id), avatar: acc.avatarUrl(acc.user(id)), you: id === me(req) })),
     householdNames: (m.households || []).map((h) => acc.household(h)).filter((h) => h?.members.includes(me(req))).map((h) => h.name),
@@ -616,22 +638,24 @@ const grantRecipe = (m, share) => { if (m.recipeId && store.get(m.recipeId)) sto
 
 app.get('/api/meals', (req, res) => res.json(visibleMeals(req, str(req.query.from, 10), str(req.query.to, 10)).map((m) => mealView(req, m))));
 app.get('/api/meals/:id', wrap((req, res) => res.json(mealView(req, mealFor(req)))));
-app.post('/api/meals', wrap((req, res) => {
+app.post('/api/meals', wrap(async (req, res) => {
   const b = req.body || {};
   if (b.recipeId) { const r = store.get(b.recipeId); if (!r || !acc.canAccess(me(req), r)) throw fail(400, 'Recipe not found'); }
   const share = acc.cleanShare(me(req), b);
   const m = meals.create(me(req), b, share);
   const rec = m.recipeId && store.get(m.recipeId);
   if (rec && rec.owner === me(req)) grantRecipe(m, share);
+  if (remoteIdsOf(b).length) await fed.setTargets(req.user, 'meal', m.id, remoteIdsOf(b));
   res.json(mealView(req, m));
 }));
-app.put('/api/meals/:id', wrap((req, res) => {
+app.put('/api/meals/:id', wrap(async (req, res) => {
   const m = mealFor(req);
   if (m.owner !== me(req)) throw fail(403, 'Only the person who planned this meal can change it');
   const share = 'users' in req.body || 'households' in req.body ? acc.cleanShare(me(req), req.body) : null;
   const out = meals.update(m.id, req.body || {}, share);
   const rec = out.recipeId && store.get(out.recipeId);
   if (share && rec && rec.owner === me(req)) grantRecipe(out, share);
+  if ('users' in req.body && !m.remote) await fed.setTargets(req.user, 'meal', m.id, remoteIdsOf(req.body));
   res.json(mealView(req, out));
 }));
 app.delete('/api/meals/:id', wrap((req, res) => {

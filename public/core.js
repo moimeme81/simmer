@@ -87,10 +87,11 @@
 
   /** Checkbox groups for households and people. Read the result with readShare(el). */
   function shareFields(share = {}, name = 'share') {
-    const hh = S.me.households, ppl = S.people.filter((p) => p.id !== S.me.id);
+    const hh = S.me.households, ppl = S.people.filter((p) => p.id !== S.me.id && !p.remote), far = S.people.filter((p) => p.remote);
     const box = (kind, id, label, on, person) => `<label class="pick"><input type="checkbox" data-${name}="${kind}" value="${esc(id)}" ${on ? 'checked' : ''}>${person ? avatar(person, 26) : ''}<span>${esc(label)}</span></label>`;
     return `${hh.length ? `<fieldset><legend>${t('share.households')}</legend>${hh.map((h) => box('households', h.id, h.name, share.households?.includes(h.id))).join('')}</fieldset>` : ''}
-      <fieldset><legend>${t('share.people')}</legend>${ppl.length ? ppl.map((p) => box('users', p.id, p.name, share.users?.includes(p.id), p)).join('') : `<p class="muted">${t('share.noPeople')}</p>`}</fieldset>`;
+      <fieldset><legend>${t('share.people')}</legend>${ppl.length ? ppl.map((p) => box('users', p.id, p.name, share.users?.includes(p.id), p)).join('') : `<p class="muted">${t('share.noPeople')}</p>`}</fieldset>
+      ${far.length ? `<fieldset><legend>${t('share.otherSimmers')}</legend>${far.map((p) => box('users', p.id, `${p.name} · ${p.server}`, share.users?.includes(p.id), p)).join('')}</fieldset>` : ''}`;
   }
   const readShare = (el, name = 'share') => ({
     households: [...el.querySelectorAll(`[data-${name}=households]:checked`)].map((c) => c.value),

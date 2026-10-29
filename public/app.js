@@ -200,7 +200,7 @@ async function recipe(id, opts = {}) {
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
     <div class="chips colrow" id="colrow"></div>
     <div class="facts" id="facts"></div>
-    <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="editBtn">${ic('edit')} ${t('recipe.edit')}</button><button id="shareBtn">${ic('share')} ${t('share.button')}</button>${S.remoteShareButton('recipe', r.id, r.title)}<button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
+    <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="editBtn">${ic('edit')} ${t('recipe.edit')}</button><button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
     <p class="muted sharedline" id="sharedline">${esc(r.mine ? S.shareText(r) : t('recipe.guest', { name: r.ownerName }))}</p>
     <div class="rbody">
       <aside><h2 class="sec">${t('recipe.ingredients')}</h2><div class="scaler" id="scaler"></div><div class="unitbox" id="unitbox" role="group" aria-label="${esc(t('units.view'))}"></div><ul class="ing" id="ing"></ul></aside>
@@ -264,7 +264,6 @@ async function recipe(id, opts = {}) {
   $('#editBtn')?.addEventListener('click', () => S.recipeEditor(r, () => recipe(id, opts)));
   $('#del')?.addEventListener('click', async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } });
   $('#toPlan').onclick = () => S.mealSheet({ recipe: r, date: S.ymd(new Date()) }, () => { $('#toPlan').textContent = t('share.save') + ' ✓'; });
-  S.wireRemoteShare(app);
   $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));
   $('#webPhoto')?.addEventListener('click', () => S.photoPicker(r.title, async (p) => {
     try { await S.post(`/api/recipes/${id}/image-from-url`, { url: p.url, alt: p.alt, credit: p.credit }); recipe(id, opts); }
@@ -467,12 +466,26 @@ async function footer() {
 }
 
 /* ---------- router and boot ---------- */
+/** Banner for admins when another Simmer has asked to link. Checked on every page change and once a minute. */
+function noticeDraw() {
+  const el = $('#notice');
+  if (!el) return;
+  const n = S.me?.pendingLinks || 0;
+  el.hidden = !n || location.hash.startsWith('#/account');
+  el.innerHTML = n ? `<a href="#/account">${ic('globe')} ${t('fed.notice', { n })}</a>` : '';
+}
+async function notice() {
+  noticeDraw();
+  if (!S.me?.admin) return;
+  try { const me = await api('/api/me'); if (S.me) { S.me.pendingLinks = me.pendingLinks; S.me.linkedSimmers = me.linkedSimmers; noticeDraw(); } } catch { /* offline */ }
+}
+setInterval(() => { if (!document.hidden) notice(); }, 60_000);
 function route() {
   S.stopLists?.(); clearInterval(importTimer);
   const h = location.hash;
   const join = h.match(/^#\/join\/([\w-]+)/);
   if (join && !S.me) { S.authScreen('join', join[1]); return; }
-  chrome(); dockSig = ''; renderDock(); renderCookBar();
+  chrome(); notice(); dockSig = ''; renderDock(); renderCookBar();
   const m = h.match(/^#\/r\/([\w-]+)(\/cook)?(?:\?meal=([\w-]+))?/);
   const view = h.startsWith('#/lists') ? () => S.views.lists((h.match(/^#\/lists\/([\w-]+)/) || [])[1]) : h.startsWith('#/plan') ? () => S.views.plan() : h.startsWith('#/account') ? () => S.views.account()
     : h.startsWith('#/import') ? importView : m ? () => recipe(m[1], { cook: !!m[2], meal: m[3] }) : home;

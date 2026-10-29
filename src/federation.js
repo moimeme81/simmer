@@ -2,8 +2,9 @@
 /**
  * Linking Simmers.
  *
- * Two admins agree on a shared token and each add the other as a "linked Simmer". After that, anyone on either server
- * can share a recipe, a shopping list, a single meal or a whole collection with a person on the other server, by username.
+ * Every Simmer has its own long key. Admin A pastes B's key (plus B's address) to ask for a link; B's admin is notified and pastes
+ * A's key to accept. Having both keys proves the two owners really were in touch. They then swap fresh per-link keys and the
+ * servers see each other's people, so anyone can share a recipe, a shopping list, a meal or a collection with anyone on either.
  *
  *  - The owner's server stays the source of truth. The other server keeps a mirror and is told about every change
  *    (changes are pushed a couple of seconds after they happen, and re-tried every minute when the other side is down).
@@ -44,51 +45,126 @@ class Federation {
   save() { const tmp = this.file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(this.db, null, 2), { mode: 0o600 }); fs.renameSync(tmp, this.file); }
   start() { this.interval = setInterval(() => this.schedule(0), 60_000); this.interval.unref?.(); }
 
-  /* ---------- the links ---------- */
-  peer(id) { return this.db.peers.find((p) => p.id === id) || null; }
-  bySecret(token) {
-    const a = crypto.createHash('sha256').update(String(token || '')).digest();
-    return this.db.peers.find((p) => crypto.timingSafeEqual(a, crypto.createHash('sha256').update(p.secret).digest())) || null;
-  }
-  addPeer({ name, url, secret }) {
-    name = clip(name, 60).trim();
-    if (!name) throw new FedError('Give this Simmer a name, for example your friend’s name.');
+  /* ---------- this Simmer's own key and name ---------- */
+  /** A long secret that identifies THIS server. Its admin gives it to a friend's admin, who needs it to ask for a link. */
+  get serverKey() { if (!this.db.serverKey) { this.db.serverKey = crypto.randomBytes(48).toString('base64url'); this.save(); } return this.db.serverKey; }
+  rotateKey() { this.db.serverKey = crypto.randomBytes(48).toString('base64url'); this.save(); return this.db.serverKey; }
+  get serverName() { return this.db.serverName || `${this.acc.firstAdmin?.name || 'My'}’s Simmer`; }
+  setServerName(name) { name = clip(name, 60).trim(); if (!name) throw new FedError('Enter a name for this Simmer.'); this.db.serverName = name; this.save(); }
+  static same(a, b) { const h = (v) => crypto.createHash('sha256').update(String(v || '')).digest(); return crypto.timingSafeEqual(h(a), h(b)); }
+  isServerKey(token) { return !!token && Federation.same(token, this.serverKey); }
+  static cleanUrl(url, what = 'the other Simmer') {
     let u;
-    try { u = new URL(String(url).trim()); } catch { throw new FedError('Enter the address of the other Simmer, for example https://simmer.example.com'); }
+    try { u = new URL(String(url).trim()); } catch { throw new FedError(`Enter the address of ${what}, for example https://simmer.example.com`); }
     if (!/^https?:$/.test(u.protocol)) throw new FedError('The address must start with http:// or https://');
-    const base = `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
-    secret = String(secret || '').trim() || crypto.randomBytes(24).toString('base64url');
-    if (secret.length < 16) throw new FedError('The shared token must be at least 16 characters. Leave it empty to make one.');
-    if (this.db.peers.some((p) => p.secret === secret)) throw new FedError('That token is already used for another linked Simmer.');
-    if (this.db.peers.some((p) => p.url === base)) throw new FedError('That Simmer is already linked.');
-    const p = { id: uuid(), name, url: base, secret, createdAt: new Date().toISOString() };
+    return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+  }
+  rememberSelf(url) { const u = Federation.cleanUrl(url, 'this Simmer'); if (this.db.selfUrl !== u) { this.db.selfUrl = u; this.save(); } return u; }
+  overview() {
+    return {
+      name: this.serverName, key: this.serverKey, selfUrl: this.db.selfUrl || '',
+      peers: this.db.peers.map((p) => this.peerView(p, true)),
+      pending: (this.db.pending || []).map((r) => ({ id: r.id, name: r.name, url: r.url, at: r.at })),
+    };
+  }
+  pendingCount() { return (this.db.pending || []).length; }
+
+  /* ---------- linking two Simmers: each admin hands the other their server's key ---------- */
+  peer(id) { return this.db.peers.find((p) => p.id === id) || null; }
+  active() { return this.db.peers.filter((p) => p.state === 'active'); }
+  bySecret(token) {
+    return this.active().find((p) => p.inKey && Federation.same(token, p.inKey)) || null;
+  }
+  /** Step 1, on the server that starts it: ask the other Simmer for a link, proving we hold ITS key. */
+  async startLink({ url, key, selfUrl }) {
+    const base = Federation.cleanUrl(url);
+    key = String(key || '').trim();
+    if (key.length < 32) throw new FedError('Paste the other Simmer’s key. It is a long text from its Account page.');
+    if (this.db.peers.some((p) => p.url === base)) throw new FedError('That Simmer is already linked, or waiting for the other side to enter your key.');
+    const mine = this.rememberSelf(selfUrl);
+    if (mine === base) throw new FedError('That is this Simmer’s own address.');
+    const linkId = uuid();
+    const out = await this.call({ url: base, name: base }, '/api/federation/link-request', { linkId, name: this.serverName, url: mine }, 'POST', key);
+    const p = { id: uuid(), name: clip(out.name, 60) || base, url: base, state: 'waiting', linkId, createdAt: new Date().toISOString() };
     this.db.peers.push(p);
     this.save();
     return p;
+  }
+  /** Step 2, on the other server: a request arrives (it knew our key). It waits there until our admin enters the requester's key. */
+  receiveLinkRequest(body) {
+    const url = Federation.cleanUrl(body.url, 'the requesting Simmer');
+    if (this.db.peers.some((p) => p.url === url && p.state === 'active')) throw new FedError('Already linked.', 409);
+    this.db.pending = (this.db.pending || []).filter((r) => r.url !== url).slice(-19);
+    this.db.pending.push({ id: uuid(), linkId: clip(body.linkId, 80), name: clip(body.name, 60) || url, url, at: new Date().toISOString() });
+    this.save();
+    return { ok: true, name: this.serverName };
+  }
+  /** Step 3, on the second server: its admin enters the requester's key. If it is right, both sides now trust each other. */
+  async acceptPending(id, { key, selfUrl }) {
+    const req = (this.db.pending || []).find((r) => r.id === id);
+    if (!req) throw new FedError('That request is gone.', 404);
+    key = String(key || '').trim();
+    if (key.length < 32) throw new FedError(`Paste ${req.name}’s key. Their admin copies it from their Account page.`);
+    const mine = this.rememberSelf(selfUrl);
+    const inKey = crypto.randomBytes(32).toString('base64url');
+    let out;
+    try { out = await this.call({ url: req.url, name: req.name }, '/api/federation/link-confirm', { linkId: req.linkId, name: this.serverName, url: mine, inKey }, 'POST', key); }
+    catch (e) { throw new FedError(/did not accept/.test(e.message) ? `${req.name} did not accept that key. Ask their admin to copy it again from their Account page.` : e.message, e.status || 502); }
+    if (!out.inKey) throw new FedError(`${req.name} answered, but not like a Simmer that can be linked.`, 502);
+    this.db.pending = this.db.pending.filter((r) => r.id !== id);
+    this.db.peers = this.db.peers.filter((p) => p.url !== req.url);
+    const p = { id: uuid(), name: clip(out.name, 60) || req.name, url: req.url, state: 'active', inKey, outKey: String(out.inKey), createdAt: new Date().toISOString() };
+    this.db.peers.push(p);
+    this.save();
+    return p;
+  }
+  /** Step 4, back on the first server: the other admin proved they hold our key. The link is now active both ways. */
+  receiveLinkConfirm(body) {
+    const p = this.db.peers.find((x) => x.state === 'waiting' && x.linkId === clip(body.linkId, 80));
+    if (!p) throw new FedError('No link is waiting for that request. Start it again from the first Simmer.', 404);
+    if (typeof body.inKey !== 'string' || body.inKey.length < 32) throw new FedError('Bad key');
+    p.state = 'active'; p.outKey = body.inKey; p.inKey = crypto.randomBytes(32).toString('base64url'); delete p.linkId;
+    if (body.name) p.name = clip(body.name, 60);
+    this.save();
+    return { ok: true, inKey: p.inKey, name: this.serverName };
+  }
+  declinePending(id) {
+    const n = (this.db.pending || []).length;
+    this.db.pending = (this.db.pending || []).filter((r) => r.id !== id);
+    this.save();
+    return this.db.pending.length < n;
+  }
+  /** Take a link down (or cancel one that never completed) and tell the other side. */
+  async unlink(id) {
+    const p = this.peer(id);
+    if (!p) return false;
+    if (p.state === 'active') await this.call(p, '/api/federation/unlink', {}).catch(() => {});
+    return this.removePeer(id);
   }
   removePeer(id) {
     const n = this.db.peers.length;
     this.db.peers = this.db.peers.filter((p) => p.id !== id);
     if (this.db.peers.length === n) return false;
     this.db.shares = this.db.shares.filter((s) => s.peerId !== id);
-    // Mirrors from that Simmer stay as they are but stop updating; drop them so nothing stale is left behind.
+    // Copies from that Simmer would never update again, so remove them rather than leave stale ones behind.
     for (const r of this.store.list()) if (r.remote?.peerId === id) this.store.remove(r.id);
     for (const l of this.lists.all()) if (l.remote?.peerId === id) this.lists.deleteList(l.id);
     for (const m of this.meals.all()) if (m.remote?.peerId === id) this.meals.remove(m.id);
+    delete this.dirCache?.[id];
     this.save();
     return true;
   }
-  peerView(p, full) { return { id: p.id, name: p.name, ...(full ? { url: p.url, secretEnd: p.secret.slice(-4) } : {}) }; }
+  peerView(p, full) { return { id: p.id, name: p.name, state: p.state, ...(full ? { url: p.url } : {}) }; }
   remoteName(id) { return this.db.remoteUsers[id] || ''; }
 
-  async call(peer, route, body, method = 'POST') {
+  async call(peer, route, body, method = 'POST', key = peer.outKey, timeout = 30_000) {
     const url = peer.url + route;
     await assertPublic(url, true).catch((e) => { throw new FedError(e.message); });
     let res;
     try {
       res = await this.fetch(url, {
-        method, redirect: 'manual', signal: AbortSignal.timeout(30_000),
-        headers: { authorization: `Bearer ${peer.secret}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
+        method, redirect: 'manual', signal: AbortSignal.timeout(timeout),
+        headers: { authorization: `Bearer ${key}`, accept: 'application/json', ...(body ? { 'content-type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (e) {
@@ -100,13 +176,40 @@ class Federation {
     const text = await res.text();
     let j = null;
     try { j = text ? JSON.parse(text) : {}; } catch { /* not json */ }
-    if (res.status === 401) throw new FedError(`${peer.name} did not accept the shared token. Both sides must use the same token.`, 502);
+    if (res.status === 401) throw new FedError(`${peer.name} did not accept the key.`, 502);
     if (res.status === 429) throw new FedError(`${peer.name} is busy. Try again in a minute.`, 502);
     if (j === null || (res.status === 404 && !j.error)) throw new FedError(`${peer.url} is not a Simmer that can be linked (is it up to date?).`, 502);
     if (!res.ok) throw new FedError(j.error || `${peer.name} answered ${res.status}.`, j.code === 'no-user' ? 404 : 502);
     return j;
   }
   ping(peer) { return this.call(peer, '/api/federation/ping', null, 'GET'); }
+
+  /* ---------- people on linked Simmers (so they appear in every "share with" list, as if on this server) ---------- */
+  static rid(peerId, username) { return `r:${peerId}:${username}`; }
+  static parseRid(id) { const m = /^r:([\w-]+):(.{1,60})$/.exec(String(id || '')); return m ? { peerId: m[1], username: m[2] } : null; }
+  localDirectory() { return this.acc.db.users.map((u) => ({ username: u.username, name: u.name })); }
+  async directory() {
+    this.dirCache = this.dirCache || {};
+    const out = [];
+    await Promise.all(this.active().map(async (p) => {
+      const c = this.dirCache[p.id];
+      if (!c || Date.now() - c.at > 120_000) {
+        try { this.dirCache[p.id] = { at: Date.now(), list: (await this.call(p, '/api/federation/people', null, 'GET', p.outKey, 4000)).people || [] }; }
+        catch { this.dirCache[p.id] = { at: Date.now() - 100_000, list: c?.list || [] }; } // keep the old list, try again shortly
+      }
+      for (const u of this.dirCache[p.id].list.slice(0, 500)) out.push({ id: Federation.rid(p.id, clip(u.username, 40)), name: clip(u.name, 60), server: p.name, peerId: p.id });
+    }));
+    return out.sort((x, y) => x.name.localeCompare(y.name));
+  }
+  remoteIds(owner, kind, ref) { return this.sharesOf(owner, kind, ref).map((s) => Federation.rid(s.peerId, s.toUser)); }
+  /** Make "shared with these remote people" true for one thing: add the new ones, stop sharing with the ones left out. */
+  async setTargets(user, kind, ref, ids) {
+    const want = new Map();
+    for (const id of ids) { const r = Federation.parseRid(id); if (r && this.peer(r.peerId)?.state === 'active') want.set(Federation.rid(r.peerId, r.username).toLowerCase(), r); }
+    const have = this.sharesOf(user.id, kind, ref);
+    for (const s of have) if (!want.has(Federation.rid(s.peerId, s.toUser).toLowerCase())) await this.removeShare(user, s.id);
+    for (const [key, r] of want) if (!have.some((s) => Federation.rid(s.peerId, s.toUser).toLowerCase() === key)) await this.createShare(user, { peerId: r.peerId, toUser: r.username, kind, ref });
+  }
 
   /* ---------- sharing out ---------- */
   sharesOf(userId, kind, ref) { return this.db.shares.filter((s) => s.owner === userId && (!kind || s.kind === kind) && (!ref || s.ref === ref)); }
@@ -115,7 +218,7 @@ class Federation {
   }
   async createShare(user, { peerId, toUser, kind, ref }) {
     const peer = this.peer(peerId);
-    if (!peer) throw new FedError('Pick a linked Simmer.');
+    if (!peer || peer.state !== 'active') throw new FedError('Pick a linked Simmer.');
     toUser = clip(toUser, 60).trim().replace(/^@/, '');
     if (!toUser) throw new FedError('Enter the username of the person on that Simmer.');
     if (!KINDS.includes(kind)) throw new FedError('Cannot share that.');
@@ -163,7 +266,7 @@ class Federation {
   /** Make the other server match this one for one share. Records what was sent so unchanged things are not sent again. */
   async syncShare(s) {
     const peer = this.peer(s.peerId);
-    if (!peer) { s.error = 'This link was removed.'; return; }
+    if (!peer || peer.state !== 'active') { s.error = 'This link was removed.'; return; }
     if (s.declined) return;
     const from = this.identity(s);
     const send = async (key, payload, extra = {}) => {

@@ -384,3 +384,10 @@ ol.cats input:not([type=color]){flex:1;min-width:0}
   .mtop{justify-content:center}
 }
 @media (max-width:640px){.seg{margin-right:4px}.seg button{padding:6px 10px}.planhead .row{gap:6px}}
+
+.notice{background:#fff3cd;border-bottom:1px solid #e8d38a}
+.notice a{display:flex;align-items:center;gap:8px;max-width:1100px;margin:0 auto;padding:10px 16px;color:#5b4500;font-weight:600;text-decoration:none}
+.notice svg{flex:none}
+.keybox{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.keybox code{flex:1 1 220px;word-break:break-all;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:14px}
+.reqbox{border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;background:#fffbea}

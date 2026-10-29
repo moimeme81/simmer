@@ -102,7 +102,6 @@
           <div class="row toolbar">
             <button id="hideBtn" aria-pressed="${hide}" title="${esc(t(hide ? 'lists.showChecked' : 'lists.hideChecked'))}" aria-label="${esc(t(hide ? 'lists.showChecked' : 'lists.hideChecked'))}">${ic(hide ? 'eyeoff' : 'eye')}</button>
             ${cur.mine ? `<button id="shareBtn" aria-label="${esc(t('share.button'))}" title="${esc(t('share.button'))}">${ic('share')}</button>` : ''}
-            ${cur.mine && S.me.linkedSimmers ? `<button id="rshareBtn" aria-label="${esc(t('fed.button'))}" title="${esc(t('fed.button'))}" data-rshare data-kind="list" data-ref="${esc(cur.id)}" data-title="${esc(cur.name)}">${ic('globe')}</button>` : ''}
             <button id="setBtn" aria-label="${esc(t('lists.settings'))}" title="${esc(t('lists.settings'))}">${ic('gear')}</button></div>
         </div>
         ${chips}
@@ -135,7 +134,6 @@
         $('[data-edit]', li).onclick = (e) => { e.stopPropagation(); itemSheet(cur.items.find((x) => x.id === id)); };
       });
       $('#clear')?.addEventListener('click', async () => { replace(await S.post(`/api/lists/${cur.id}/clear-checked`)); draw(); });
-      S.wireRemoteShare(S.app);
       $('#shareBtn')?.addEventListener('click', () => S.shareDialog(cur, async (share) => { replace(await S.put(`/api/lists/${cur.id}/share`, share)); draw(); }));
       $('#setBtn').onclick = settingsSheet;
     };
