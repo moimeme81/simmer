@@ -4,7 +4,7 @@ const path = require('node:path');
 const express = require('express');
 const Scale = require('../public/scale');
 const { extractRecipe } = require('./extract');
-const { Store, ListStore, MealStore } = require('./store');
+const { Store, ListStore, MealStore, TEMPLATES } = require('./store');
 const { Accounts, fail } = require('./accounts');
 const { AnyListImport } = require('./anylist');
 const { AISLES } = require('./ingredients');
@@ -263,6 +263,24 @@ app.post('/api/import/anylist', wrap((req, res) => {
 }));
 app.get('/api/import/anylist/status', (req, res) => res.json(jobFor(req.user).status()));
 
+/* ---------- recipe collections: ordered per person, renamed or removed across their recipes ---------- */
+const myRecipes = (req) => store.list().filter((r) => r.owner === me(req));
+const saveCollections = (req, names) => { acc.user(me(req)).collections = cleanCollections(names); acc.save(); };
+app.put('/api/collections', wrap((req, res) => { saveCollections(req, req.body?.names); res.json({ names: acc.user(me(req)).collections }); }));
+app.post('/api/collections/rename', wrap((req, res) => {
+  const from = str(req.body?.from, 40).trim(), to = str(req.body?.to, 40).trim();
+  if (!from || !to) throw fail(400, 'Enter a name');
+  for (const r of myRecipes(req)) if ((r.collections || []).includes(from)) store.update(r.id, { collections: cleanCollections(r.collections.map((c) => (c === from ? to : c))) });
+  saveCollections(req, (acc.user(me(req)).collections || []).map((c) => (c === from ? to : c)));
+  res.json({ names: acc.user(me(req)).collections });
+}));
+app.post('/api/collections/delete', wrap((req, res) => {
+  const name = str(req.body?.name, 40).trim();
+  for (const r of myRecipes(req)) if ((r.collections || []).includes(name)) store.update(r.id, { collections: r.collections.filter((c) => c !== name) });
+  saveCollections(req, (acc.user(me(req)).collections || []).filter((c) => c !== name));
+  res.json({ names: acc.user(me(req)).collections });
+}));
+
 /* ---------- recipes saved without a picture ---------- */
 const myRecipeIds = (req) => new Set(store.list().filter((r) => acc.canAccess(me(req), r)).map((r) => r.id));
 app.get('/api/photos/status', (req, res) => res.json({ ...photos.status(myRecipeIds(req)), enabled: process.env.PHOTO_CHECK !== 'false' }));
@@ -295,6 +313,10 @@ app.post('/api/update/check', admin, (_req, res) => {
 const listView = (req, l) => ({ ...l, mine: l.owner === me(req), ownerName: nameOf(l.owner), sharedWith: shareView(l) });
 const listFor = (req) => { const l = lists.get(req.params.id); if (!l || !acc.canAccess(me(req), l)) throw notFound(); return l; };
 
+app.get('/api/list-templates', (req, res) => {
+  const fr = req.query.lang === 'fr';
+  res.json(Object.entries(TEMPLATES).map(([id, t]) => ({ id, icon: t.icon, auto: t.auto, categories: t.cats ? t.cats.map((c) => ({ name: fr ? c.fr : c.en, color: c.color })) : null })));
+});
 app.get('/api/lists', wrap((req, res) => {
   let mine = lists.all().filter((l) => acc.canAccess(me(req), l));
   if (!mine.length) mine = [lists.createList(me(req), 'Groceries', myShare(req))];
@@ -303,7 +325,7 @@ app.get('/api/lists', wrap((req, res) => {
 app.post('/api/lists', wrap((req, res) => {
   const name = str(req.body?.name, 80).trim();
   if (!name) throw fail(400, 'Missing name');
-  const l = lists.createList(me(req), name, myShare(req));
+  const l = lists.createList(me(req), name, myShare(req), undefined, { template: str(req.body?.template, 20), lang: req.body?.lang === 'fr' ? 'fr' : 'en' });
   res.json(listView(req, req.body?.icon || req.body?.color ? lists.settings(l.id, { icon: req.body.icon, color: req.body.color }) : l));
 }));
 app.delete('/api/lists/:id', wrap((req, res) => {

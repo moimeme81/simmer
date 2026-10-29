@@ -68,6 +68,13 @@
   // Accounts, sharing, aisles, stores, meal plan.
   const MORE = {
     en: {
+      'lists.categories': 'Categories', 'lists.categoriesHelp': 'These belong to this list only. Items are grouped under them in this order.', 'lists.auto': 'Recognise grocery items and file them in the matching aisle',
+      'lists.categoryName': 'Category name', 'lists.newCategory': 'New category', 'lists.addCategory': 'Add category', 'lists.noCategories': 'No categories: items show in one plain list.', 'lists.noCategory': 'No category', 'lists.uncat': 'No category',
+      'lists.template': 'Start over from a template…', 'lists.applyTemplate': 'Replace categories', 'lists.confirmTemplate': 'Replace this list’s categories with “{name}”? Items are kept but become uncategorised.', 'lists.kind': 'Kind of list',
+      'lists.groceryDesc': 'Groceries: 19 aisles, and ingredients are recognised automatically.',
+      'tpl.grocery': 'Groceries', 'tpl.hardware': 'Hardware store', 'tpl.ikea': 'IKEA', 'tpl.todo': 'To-do', 'tpl.blank': 'Blank',
+      'col.manage': 'Manage collections', 'col.rename': 'Rename', 'col.delete': 'Delete', 'col.confirmDelete': 'Delete “{name}”? Recipes keep everything else; they just leave this collection.', 'col.help': 'Collections are yours: order them, rename them (renaming into an existing name merges the two) or remove them.',
+      'col.add2': 'Add collection',
       'recipe.forMeal': 'In your meal plan: {date}, {slot}', 'recipe.mealServings': '{n} servings', 'recipe.forDate': 'for {date}', 'recipe.pickWhich': 'Pick a list, then choose the ingredients that go on it.',
       'recipe.pickWhichMeal': 'Pick a list, then choose the ingredients. Amounts are for {n} servings and the items will say they are for {date}.', 'recipe.pickItems': 'Choose the ingredients for this list',
       'recipe.selectAll': 'Select all', 'recipe.selectNone': 'Select none', 'recipe.addN': 'Add {n} to {list}', 'recipe.listDone': 'Done', 'recipe.backToLists': 'Back to lists',
@@ -127,6 +134,13 @@
       'aisle.personal': 'Personal care', 'aisle.pets': 'Pets', 'aisle.other': 'Other',
     },
     fr: {
+      'lists.categories': 'Catégories', 'lists.categoriesHelp': 'Elles appartiennent à cette liste seulement. Les articles sont regroupés dessous dans cet ordre.', 'lists.auto': 'Reconnaître les produits d’épicerie et les classer dans le bon rayon',
+      'lists.categoryName': 'Nom de la catégorie', 'lists.newCategory': 'Nouvelle catégorie', 'lists.addCategory': 'Ajouter la catégorie', 'lists.noCategories': 'Aucune catégorie : les articles s’affichent dans une seule liste.', 'lists.noCategory': 'Sans catégorie', 'lists.uncat': 'Sans catégorie',
+      'lists.template': 'Repartir d’un modèle…', 'lists.applyTemplate': 'Remplacer les catégories', 'lists.confirmTemplate': 'Remplacer les catégories de cette liste par « {name} » ? Les articles sont conservés mais n’ont plus de catégorie.', 'lists.kind': 'Type de liste',
+      'lists.groceryDesc': 'Épicerie : 19 rayons, et les ingrédients sont reconnus automatiquement.',
+      'tpl.grocery': 'Épicerie', 'tpl.hardware': 'Quincaillerie', 'tpl.ikea': 'IKEA', 'tpl.todo': 'À faire', 'tpl.blank': 'Vide',
+      'col.manage': 'Gérer les collections', 'col.rename': 'Renommer', 'col.delete': 'Supprimer', 'col.confirmDelete': 'Supprimer « {name} » ? Les recettes restent intactes; elles quittent seulement cette collection.', 'col.help': 'Les collections sont à vous : ordonnez-les, renommez-les (renommer vers un nom existant fusionne les deux) ou supprimez-les.',
+      'col.add2': 'Ajouter une collection',
       'recipe.forMeal': 'Dans votre menu : {date}, {slot}', 'recipe.mealServings': '{n} portions', 'recipe.forDate': 'pour {date}', 'recipe.pickWhich': 'Choisissez une liste, puis les ingrédients qui s’y ajoutent.',
       'recipe.pickWhichMeal': 'Choisissez une liste, puis les ingrédients. Les quantités sont pour {n} portions et les articles indiqueront qu’ils sont pour {date}.', 'recipe.pickItems': 'Choisissez les ingrédients pour cette liste',
       'recipe.selectAll': 'Tout sélectionner', 'recipe.selectNone': 'Tout désélectionner', 'recipe.addN': 'Ajouter {n} à {list}', 'recipe.listDone': 'Terminé', 'recipe.backToLists': 'Retour aux listes',

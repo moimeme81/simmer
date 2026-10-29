@@ -9,7 +9,6 @@
   const pref = (k, d) => { try { return localStorage.getItem('simmer-' + k) ?? d; } catch { return d; } };
   const setPref = (k, v) => { try { localStorage.setItem('simmer-' + k, v); } catch { /* private mode */ } };
 
-  /** Aisles in walking order: the store's own order, else the list's, else the default. */
   const AISLE_COLORS = { produce: '#4C9A5B', meat: '#C0453A', seafood: '#3C8DB6', deli: '#D1618A', dairy: '#7FA7D6', bakery: '#D9A441', frozen: '#5FA3C7', canned: '#B5723C', grains: '#C9A66B', baking: '#D8B05A', spices: '#B8522B', condiments: '#8A6A3C', breakfast: '#7A5A3A', snacks: '#E08A3B', drinks: '#3F8FA8', household: '#7A8794', personal: '#A06AB4', pets: '#8A6D4F', other: '#8A8F98' };
   const COLORS = ['#2F7D6B', '#D9822B', '#C0453A', '#3C6FB6', '#7A52A3', '#B8892F', '#4A5A6A', '#D1618A'];
   const ICONS = ['🛒', '🥦', '🥩', '🧀', '🍞', '🏠', '🎁', '🥳', '💊', '🐶'];
@@ -27,12 +26,20 @@
   };
 
   S.listBadge = badge;
+  const PALETTE = ['#4C9A5B', '#C0453A', '#3C8DB6', '#D9A441', '#7A52A3', '#D1618A', '#B5723C', '#4A5A6A'];
+  /** Display name of a category: the person's own name, or the translated built-in aisle. */
+  const catLabel = (c) => c.name || t('aisle.' + c.id);
+  const catColor = (c, n) => c.color || AISLE_COLORS[c.id] || PALETTE[n % PALETTE.length];
+  /** Categories in walking order: the store's own order if it has one, else the list's. */
   const orderFor = (l, storeId) => {
     const own = l.stores.find((s) => s.id === storeId)?.order;
-    const first = (own?.length ? own : l.aisleOrder) || [];
-    return [...new Set([...first, ...DEFAULT_ORDER])];
+    if (!own?.length) return l.categories;
+    const rank = new Map(own.map((id, n) => [id, n]));
+    return [...l.categories].sort((x, y) => (rank.get(x.id) ?? 1e6) - (rank.get(y.id) ?? 1e6));
   };
+  S.catLabel = catLabel;
 
+  const AISLE_IDS = Object.keys(AISLE_COLORS);
   const remaining = (l) => l.items.filter((i) => !i.checked).length;
 
   /** Lists as a list of lists: an index on the left, the chosen list on the right. On a phone they are two screens. */
@@ -43,6 +50,7 @@
     const detailOnly = !!selected && all.some((l) => l.id === selected);
     let filter = '';           // '' all, 'none', or a store id
     let query = '';            // search box over the index
+    let addCat = '';           // category chosen in the add box of a custom list
     const hideKey = () => 'hide-' + cur.id;
     const hiding = () => pref(hideKey(), '') === '1';
 
@@ -78,9 +86,10 @@
       const visible = (i) => !filter || (filter === 'none' ? !i.store : i.store === filter);
       const open = cur.items.filter((i) => !i.checked && visible(i));
       const done = cur.items.filter((i) => i.checked && visible(i));
+      const known = new Set(cur.categories.map((c) => c.id));
       const byAisle = new Map();
-      for (const i of open) (byAisle.get(i.aisle || 'other') || byAisle.set(i.aisle || 'other', []).get(i.aisle || 'other')).push(i);
-      const aisles = orderFor(cur, filter).filter((a) => byAisle.has(a));
+      for (const i of open) { const k = known.has(i.aisle) ? i.aisle : ''; (byAisle.get(k) || byAisle.set(k, []).get(k)).push(i); }
+      const groups = [...orderFor(cur, filter).map((c, n) => ({ id: c.id, label: catLabel(c), color: catColor(c, n) })), { id: '', label: cur.categories.length ? t('lists.uncat') : '', color: '#8A8F98' }].filter((g) => byAisle.has(g.id));
       const hide = hiding();
       const chips = cur.stores.length
         ? `<div class="chips filters" role="group" aria-label="${esc(t('lists.store'))}">${[['', t('lists.allStores')], ...cur.stores.map((s) => [s.id, s.name]), ['none', t('lists.noStore')]]
@@ -96,8 +105,10 @@
             <button id="setBtn" aria-label="${esc(t('lists.settings'))}" title="${esc(t('lists.settings'))}">${ic('gear')}</button></div>
         </div>
         ${chips}
-        <form class="field" id="addItem" style="margin:12px 0"><input type="text" required placeholder="${esc(t('lists.addPh'))}" aria-label="${esc(t('lists.addPh'))}" autocomplete="off"><button class="primary">${t('lists.add')}</button></form>
-        ${aisles.map((a) => `<section class="aisle" style="--ac:${AISLE_COLORS[a] || '#8A8F98'}"><h3 class="aislehead">${esc(S.aisleLabel(a))}<span>${byAisle.get(a).length}</span></h3><ul class="items">${byAisle.get(a).sort((x, y) => x.name.localeCompare(y.name)).map(itemRow).join('')}</ul></section>`).join('') || `<p class="muted">${t('lists.nothing')}</p>`}
+        <form class="field" id="addItem" style="margin:12px 0"><input type="text" required placeholder="${esc(t('lists.addPh'))}" aria-label="${esc(t('lists.addPh'))}" autocomplete="off">
+          ${!cur.auto && cur.categories.length ? `<select id="addCat" aria-label="${esc(t('lists.aisle'))}" style="max-width:190px"><option value="">${t('lists.noCategory')}</option>${cur.categories.map((c) => `<option value="${c.id}" ${c.id === addCat ? 'selected' : ''}>${esc(catLabel(c))}</option>`).join('')}</select>` : ''}
+          <button class="primary">${t('lists.add')}</button></form>
+        ${groups.map((g) => `<section class="aisle ${g.label ? '' : 'nohead'}" style="--ac:${g.color}">${g.label ? `<h3 class="aislehead">${esc(g.label)}<span>${byAisle.get(g.id).length}</span></h3>` : ''}<ul class="items">${byAisle.get(g.id).sort((x, y) => x.name.localeCompare(y.name)).map(itemRow).join('')}</ul></section>`).join('') || `<p class="muted">${t('lists.nothing')}</p>`}
         ${done.length && !hide ? `<h3 class="sec" style="margin-top:22px">${t('lists.inCart', { n: done.length })} <button class="quiet" id="clear">${t('lists.clear')}</button></h3><ul class="items">${done.map(itemRow).join('')}</ul>` : ''}
         ${done.length && hide ? `<p class="muted hiddenn">${t('lists.hiddenN', { n: done.length })} <button class="quiet" id="clear">${t('lists.clear')}</button></p>` : ''}`;
       wireDetail();
@@ -111,7 +122,8 @@
       $('#addItem').onsubmit = async (e) => {
         e.preventDefault();
         const name = $('input', e.target).value.trim(); if (!name) return;
-        replace(await S.post(`/api/lists/${cur.id}/items`, { name, ...(filter && filter !== 'none' ? { store: filter } : {}) }));
+        addCat = $('#addCat')?.value || '';
+        replace(await S.post(`/api/lists/${cur.id}/items`, { name, ...(addCat ? { aisle: addCat } : {}), ...(filter && filter !== 'none' ? { store: filter } : {}) }));
         draw(); $('#addItem input').focus();
       };
       app.querySelectorAll('ul.items li[data-id]').forEach((li) => {
@@ -127,16 +139,27 @@
     };
 
     $('#lq').oninput = (e) => { query = e.target.value; drawIndex(); };
-    $('#newList').onclick = () => {
-      let icon = '', color = COLORS[0];
+    $('#newList').onclick = async () => {
+      const templates = await api('/api/list-templates?lang=' + I18n.lang).catch(() => []);
+      let icon = '', color = COLORS[0], template = 'grocery';
       S.modal(`<h2 class="sec">${t('lists.newTitle')}</h2><form id="nlf" class="stack"><label for="nln">${t('lists.newName')}</label><input id="nln" required maxlength="60" autocomplete="off">
-        ${looksFields(icon, color)}<p class="err" id="nle" hidden></p>
+        <label>${t('lists.kind')}</label>
+        <div class="kinds" role="radiogroup" aria-label="${esc(t('lists.kind'))}">${templates.map((x) => `<button type="button" class="fchip ${x.id === template ? 'on' : ''}" data-tpl="${x.id}" role="radio" aria-checked="${x.id === template}">${x.icon ? esc(x.icon) + ' ' : ''}${esc(t('tpl.' + x.id))}</button>`).join('')}</div>
+        <small class="muted" id="kinddesc"></small>
+        <div id="looks">${looksFields(icon, color)}</div><p class="err" id="nle" hidden></p>
         <div class="row end"><button type="button" class="quiet" data-x>${t('share.cancel')}</button><button class="primary">${t('lists.create')}</button></div></form>`, (el, close) => {
         $('[data-x]', el).onclick = close;
-        wireLooks(el, (i, c) => { icon = i; color = c; });
+        const wire = () => wireLooks($('#looks', el), (i, c) => { icon = i; color = c; });
+        const describe = () => { const x = templates.find((y) => y.id === template); $('#kinddesc', el).textContent = x?.categories ? (x.categories.length ? x.categories.map((c) => c.name).join(', ') : t('lists.noCategories')) : t('lists.groceryDesc'); };
+        el.querySelectorAll('[data-tpl]').forEach((b) => (b.onclick = () => {
+          template = b.dataset.tpl; icon = templates.find((y) => y.id === template)?.icon || '';
+          el.querySelectorAll('[data-tpl]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+          $('#looks', el).innerHTML = looksFields(icon, color); wire(); describe();
+        }));
+        wire(); describe();
         $('#nlf', el).onsubmit = async (e) => {
           e.preventDefault();
-          try { const l = await S.post('/api/lists', { name: $('#nln', el).value, icon, color }); close(); location.hash = '#/lists/' + l.id; }
+          try { const l = await S.post('/api/lists', { name: $('#nln', el).value, icon, color, template, lang: I18n.lang }); close(); location.hash = '#/lists/' + l.id; }
           catch (x) { const er = $('#nle', el); er.textContent = x.message; er.hidden = false; }
         };
       });
@@ -147,14 +170,15 @@
       S.modal(`<h2 class="sec">${t('lists.item')}</h2><form id="itf" class="stack">
         <label for="in">${t('lists.item')}</label><input id="in" value="${esc(it.name)}" required>
         <label for="iq">${t('lists.quantity')}</label><input id="iq" value="${esc(it.quantity)}">
-        <label for="ia">${t('lists.aisle')}</label><select id="ia">${DEFAULT_ORDER.map((a) => `<option value="${a}" ${a === it.aisle ? 'selected' : ''}>${esc(S.aisleLabel(a))}</option>`).join('')}</select>
+        ${cur.categories.length ? `<label for="ia">${t('lists.aisle')}</label><select id="ia"><option value="">${t('lists.noCategory')}</option>${cur.categories.map((c) => `<option value="${c.id}" ${c.id === it.aisle ? 'selected' : ''}>${esc(catLabel(c))}</option>`).join('')}</select>` : ''}
         ${cur.stores.length ? `<label for="is">${t('lists.store')}</label><select id="is"><option value="">${t('lists.noStore')}</option>${cur.stores.map((s) => `<option value="${s.id}" ${s.id === it.store ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>` : ''}
         <div class="row between"><button type="button" class="quiet" data-del>${t('meal.remove')}</button><span class="row"><button type="button" class="quiet" data-x>${t('share.cancel')}</button><button class="primary">${t('lists.save')}</button></span></div></form>`, (el, close) => {
         $('[data-x]', el).onclick = close;
         $('[data-del]', el).onclick = async () => { cur.items = cur.items.filter((x) => x.id !== it.id); close(); draw(); await S.del(`/api/lists/${cur.id}/items/${it.id}`); };
         $('#itf', el).onsubmit = async (e) => {
           e.preventDefault();
-          const patch = { name: $('#in', el).value, quantity: $('#iq', el).value, aisle: $('#ia', el).value };
+          const patch = { name: $('#in', el).value, quantity: $('#iq', el).value };
+          if ($('#ia', el)) patch.aisle = $('#ia', el).value;
           if ($('#is', el)) patch.store = $('#is', el).value;
           Object.assign(it, await S.patch(`/api/lists/${cur.id}/items/${it.id}`, patch));
           close(); draw();
@@ -163,38 +187,59 @@
     }
 
     function settingsSheet() {
-      const order = orderFor(cur, '').filter((a) => DEFAULT_ORDER.includes(a));
+      let cats = cur.categories.map((c) => ({ ...c }));
       const stores = cur.stores.map((s) => ({ ...s }));
       const rules = { ...cur.aisleStores };
-      let icon = cur.icon || '', color = cur.color || '';
-      S.modal('<div id="setbody"></div>', (el, close) => {
+      let icon = cur.icon || '', color = cur.color || '', auto = cur.auto, name = cur.name;
+      S.modal('<div id="setbody"></div>', async (el, close) => {
+        const templates = await api('/api/list-templates?lang=' + I18n.lang).catch(() => []);
         const render = () => {
           $('#setbody', el).innerHTML = `
             <h2 class="sec">${t('lists.settings')}</h2>
             <form id="sf" class="stack">
-              <label for="sn">${t('lists.rename')}</label><input id="sn" value="${esc(cur.name)}" required>
+              <label for="sn">${t('lists.rename')}</label><input id="sn" value="${esc(name)}" required>
               ${looksFields(icon, color)}
+              <h3 class="sub">${t('lists.categories')}</h3><p class="muted">${t('lists.categoriesHelp')}</p>
+              <label class="pick"><input type="checkbox" id="auto" ${auto ? 'checked' : ''}><span>${t('lists.auto')}</span></label>
+              <ol class="order cats">${cats.map((c, n) => `<li><input type="color" data-ccolor="${n}" value="${c.color || AISLE_COLORS[c.id] || PALETTE[n % PALETTE.length]}" aria-label="${esc(t('lists.color'))}"><input data-cname="${n}" value="${esc(c.name || S.aisleLabel(c.id))}" aria-label="${esc(t('lists.categoryName'))}">
+                <span class="row"><button type="button" class="quiet" data-up="${n}" ${n ? '' : 'disabled'} aria-label="${esc(t('lists.up'))}">${ic('up')}</button><button type="button" class="quiet" data-down="${n}" ${n < cats.length - 1 ? '' : 'disabled'} aria-label="${esc(t('lists.down'))}">${ic('down')}</button><button type="button" class="quiet" data-cdel="${n}" aria-label="${esc(t('meal.remove'))}">${ic('close')}</button></span></li>`).join('') || `<li class="muted">${t('lists.noCategories')}</li>`}</ol>
+              <div class="row"><input id="nc" placeholder="${esc(t('lists.newCategory'))}" aria-label="${esc(t('lists.newCategory'))}" maxlength="40"><button type="button" id="ncb">${t('lists.addCategory')}</button></div>
+              <div class="row"><select id="tpl" aria-label="${esc(t('lists.template'))}"><option value="">${t('lists.template')}</option>${templates.map((x) => `<option value="${x.id}">${esc(t('tpl.' + x.id))}</option>`).join('')}</select><button type="button" id="tplb">${t('lists.applyTemplate')}</button></div>
               <h3 class="sub">${t('lists.stores')}</h3>
               ${stores.map((s, n) => `<div class="row"><input data-sname="${n}" value="${esc(s.name)}" aria-label="${esc(t('lists.storeName'))}"><button type="button" class="quiet" data-sdel="${n}" aria-label="${esc(t('meal.remove'))}">${ic('close')}</button></div>`).join('')}
               <div class="row"><input id="ns" placeholder="${esc(t('lists.storeName'))}" aria-label="${esc(t('lists.storeName'))}"><button type="button" id="nsb">${t('lists.addStore')}</button></div>
-              ${stores.length ? `<h3 class="sub">${t('lists.rules')}</h3><p class="muted">${t('lists.rulesHelp')}</p>
-                <div class="rules">${order.filter((a) => a !== 'other' || true).map((a) => `<label class="rule"><span>${esc(S.aisleLabel(a))}</span><select data-rule="${a}"><option value="">${t('lists.noRule')}</option>${stores.map((s) => `<option value="${s.id}" ${rules[a] === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>`).join('')}</div>` : ''}
-              <h3 class="sub">${t('lists.order')}</h3><p class="muted">${t('lists.orderHelp')}</p>
-              <ol class="order">${order.map((a, n) => `<li><span>${esc(S.aisleLabel(a))}</span><span class="row"><button type="button" class="quiet" data-up="${n}" ${n ? '' : 'disabled'} aria-label="${esc(t('lists.up'))}">${ic('up')}</button><button type="button" class="quiet" data-down="${n}" ${n < order.length - 1 ? '' : 'disabled'} aria-label="${esc(t('lists.down'))}">${ic('down')}</button></span></li>`).join('')}</ol>
+              ${stores.length && cats.length ? `<h3 class="sub">${t('lists.rules')}</h3><p class="muted">${t('lists.rulesHelp')}</p>
+                <div class="rules">${cats.map((c) => `<label class="rule"><span>${esc(c.name || S.aisleLabel(c.id))}</span><select data-rule="${c.id}"><option value="">${t('lists.noRule')}</option>${stores.map((s) => `<option value="${s.id}" ${rules[c.id] === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>`).join('')}</div>` : ''}
               <p class="err" id="serr" hidden></p>
               <div class="row between">${cur.mine && all.length > 1 ? `<button type="button" class="quiet" data-delist>${t('lists.delete')}</button>` : '<span></span>'}<span class="row"><button type="button" class="quiet" data-x>${t('share.cancel')}</button><button class="primary">${t('lists.save')}</button></span></div>
             </form>`;
           const sync = () => {
+            name = $('#sn', el).value; auto = $('#auto', el).checked;
+            el.querySelectorAll('[data-cname]').forEach((i) => { const c = cats[+i.dataset.cname], v = i.value.trim(); c.name = AISLE_COLORS[c.id] && v === S.aisleLabel(c.id) ? '' : v; });
+            el.querySelectorAll('[data-ccolor]').forEach((i) => { const c = cats[+i.dataset.ccolor]; c.color = i.value.toLowerCase() === (AISLE_COLORS[c.id] || PALETTE[+i.dataset.ccolor % PALETTE.length]).toLowerCase() ? '' : i.value; });
             el.querySelectorAll('[data-sname]').forEach((i) => (stores[+i.dataset.sname].name = i.value));
-            el.querySelectorAll('[data-rule]').forEach((s) => { if (s.value) rules[s.dataset.rule] = s.value; else delete rules[s.dataset.rule]; });
+            el.querySelectorAll('[data-rule]').forEach((x) => { if (x.value) rules[x.dataset.rule] = x.value; else delete rules[x.dataset.rule]; });
           };
           $('[data-x]', el).onclick = close;
           wireLooks(el, (i, c) => { sync(); icon = i; color = c; });
-          $('#nsb', el).onclick = () => { sync(); const v = $('#ns', el).value.trim(); if (v) { stores.push({ id: crypto.randomUUID(), name: v, order: null }); render(); } };
-          el.querySelectorAll('[data-sdel]').forEach((b) => (b.onclick = () => { sync(); const [gone] = stores.splice(+b.dataset.sdel, 1); delete rules[Object.keys(rules).find((k) => rules[k] === gone.id)]; for (const k of Object.keys(rules)) if (rules[k] === gone.id) delete rules[k]; render(); }));
-          const move = (n, d) => { sync(); [order[n], order[n + d]] = [order[n + d], order[n]]; render(); };
+          const addCat = () => { sync(); const v = $('#nc', el).value.trim(); if (v) { cats.push({ id: crypto.randomUUID(), name: v, color: '' }); render(); $('#nc', el).focus(); } };
+          $('#ncb', el).onclick = addCat;
+          $('#nc', el).onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addCat(); } };
+          $('#tplb', el).onclick = () => {
+            const x = templates.find((y) => y.id === $('#tpl', el).value); if (!x) return;
+            if (!confirm(t('lists.confirmTemplate', { name: t('tpl.' + x.id) }))) return;
+            sync(); auto = x.auto;
+            cats = x.categories ? x.categories.map((c) => ({ id: crypto.randomUUID(), name: c.name, color: c.color || '' })) : AISLE_IDS.map((id) => ({ id, name: '', color: '' }));
+            for (const k of Object.keys(rules)) delete rules[k];
+            if (!icon) icon = x.icon || '';
+            render();
+          };
+          el.querySelectorAll('[data-cdel]').forEach((b) => (b.onclick = () => { sync(); const [gone] = cats.splice(+b.dataset.cdel, 1); delete rules[gone.id]; render(); }));
+          const move = (n, d) => { sync(); [cats[n], cats[n + d]] = [cats[n + d], cats[n]]; render(); };
           el.querySelectorAll('[data-up]').forEach((b) => (b.onclick = () => move(+b.dataset.up, -1)));
           el.querySelectorAll('[data-down]').forEach((b) => (b.onclick = () => move(+b.dataset.down, 1)));
+          $('#nsb', el).onclick = () => { sync(); const v = $('#ns', el).value.trim(); if (v) { stores.push({ id: crypto.randomUUID(), name: v, order: null }); render(); } };
+          el.querySelectorAll('[data-sdel]').forEach((b) => (b.onclick = () => { sync(); const [gone] = stores.splice(+b.dataset.sdel, 1); for (const k of Object.keys(rules)) if (rules[k] === gone.id) delete rules[k]; render(); }));
           $('[data-delist]', el)?.addEventListener('click', async () => {
             if (!confirm(t('lists.confirmDelete', { name: listName(cur) }))) return;
             await S.del(`/api/lists/${cur.id}`); close(); location.hash = '#/lists';
@@ -205,7 +250,7 @@
               const named = stores.filter((s) => s.name.trim());
               const ids = new Set(named.map((s) => s.id));
               const l = await S.put(`/api/lists/${cur.id}/settings`, {
-                name: $('#sn', el).value, icon, color, aisleOrder: order, stores: named,
+                name, icon, color, auto, categories: cats.filter((c) => c.name || AISLE_COLORS[c.id]), stores: named,
                 aisleStores: Object.fromEntries(Object.entries(rules).filter(([, s]) => ids.has(s))),
               });
               replace(l); if (filter && filter !== 'none' && !l.stores.some((s) => s.id === filter)) filter = '';

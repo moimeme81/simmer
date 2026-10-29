@@ -106,12 +106,54 @@ async function home() {
   };
   const all = await api('/api/recipes');
   let col = ''; try { col = localStorage.getItem('simmer-col') || ''; } catch { /* private mode */ }
-  const names = () => [...new Set(all.flatMap((r) => r.collections || []))].sort((a, b) => a.localeCompare(b, I18n.lang));
+  const names = () => {
+    const used = [...new Set(all.flatMap((r) => r.collections || []))].sort((a, b) => a.localeCompare(b, I18n.lang));
+    return [...new Set([...(S.me.collections || []), ...used])];   // your own order first
+  };
   if (col && !names().includes(col)) col = '';
+  const manage = () => {
+    const rows = names().map((n) => ({ was: n, name: n }));
+    const count = (n) => all.filter((r) => (r.collections || []).includes(n)).length;
+    S.modal('<div id="mb"></div>', (el, close) => {
+      const render = () => {
+        $('#mb', el).innerHTML = `<h2 class="sec">${t('col.manage')}</h2><p class="muted">${t('col.help')}</p><form id="mf2" class="stack">
+          <ol class="order cats">${rows.map((x, n) => `<li><input data-n="${n}" value="${esc(x.name)}" maxlength="40" aria-label="${esc(t('col.rename'))}"><small class="muted">${x.was ? count(x.was) : 0}</small>
+            <span class="row"><button type="button" class="quiet" data-up="${n}" ${n ? '' : 'disabled'} aria-label="${esc(t('lists.up'))}">${ic('up')}</button><button type="button" class="quiet" data-down="${n}" ${n < rows.length - 1 ? '' : 'disabled'} aria-label="${esc(t('lists.down'))}">${ic('down')}</button><button type="button" class="quiet" data-del="${n}" aria-label="${esc(t('col.delete'))}">${ic('close')}</button></span></li>`).join('')}</ol>
+          <div class="row"><input id="nn" maxlength="40" placeholder="${esc(t('col.newPh'))}" aria-label="${esc(t('col.add2'))}"><button type="button" id="nb">${t('col.add2')}</button></div>
+          <p class="err" id="me" hidden></p>
+          <div class="row end"><button type="button" class="quiet" data-x>${t('share.cancel')}</button><button class="primary">${t('share.save')}</button></div></form>`;
+        const sync = () => el.querySelectorAll('[data-n]').forEach((i) => (rows[+i.dataset.n].name = i.value.trim()));
+        $('[data-x]', el).onclick = close;
+        const add = () => { sync(); const v = $('#nn', el).value.trim(); if (v && !rows.some((x) => x.name === v)) rows.push({ was: '', name: v }); render(); };
+        $('#nb', el).onclick = add; $('#nn', el).onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+        const move = (n, d) => { sync(); [rows[n], rows[n + d]] = [rows[n + d], rows[n]]; render(); };
+        el.querySelectorAll('[data-up]').forEach((b) => (b.onclick = () => move(+b.dataset.up, -1)));
+        el.querySelectorAll('[data-down]').forEach((b) => (b.onclick = () => move(+b.dataset.down, 1)));
+        el.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => {
+          sync(); const x = rows[+b.dataset.del];
+          if (x.was && count(x.was) && !confirm(t('col.confirmDelete', { name: x.was }))) return;
+          rows.splice(+b.dataset.del, 1); render(); (el.querySelector('#mb')); gone.push(x.was);
+        }));
+        $('#mf2', el).onsubmit = async (e) => {
+          e.preventDefault(); sync();
+          try {
+            for (const g of gone) if (g && !rows.some((x) => x.was === g)) await S.post('/api/collections/delete', { name: g });
+            for (const x of rows) if (x.was && x.name && x.name !== x.was) await S.post('/api/collections/rename', { from: x.was, to: x.name });
+            await S.put('/api/collections', { names: rows.map((x) => x.name).filter(Boolean) });
+            await S.refreshMe(); close(); home();
+          } catch (x) { $('#me', el).textContent = x.message; $('#me', el).hidden = false; }
+        };
+      };
+      const gone = [];
+      render();
+    });
+  };
   const drawCols = () => {
     const ns = names();
     $('#cols').innerHTML = ns.length ? [['', t('col.all'), all.length], ...ns.map((n) => [n, n, all.filter((r) => (r.collections || []).includes(n)).length])]
       .map(([id, label, n]) => `<button class="fchip ${col === id ? 'on' : ''}" data-c="${esc(id)}">${esc(label)} <small>${n}</small></button>`).join('') : '';
+    $('#cols').insertAdjacentHTML('beforeend', `<button class="quiet" id="colManage">${ic('gear')} ${t('col.manage')}</button>`);
+    $('#colManage').onclick = manage;
     $('#cols').querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => { col = b.dataset.c; try { localStorage.setItem('simmer-col', col); } catch { /* private mode */ } drawCols(); show(); }));
   };
   const show = () => {
@@ -191,7 +233,8 @@ async function recipe(id, opts = {}) {
   const drawCols = () => {
     $('#colrow').innerHTML = (r.collections || []).map((c) => `<span class="chip">${esc(c)}</span>`).join('') + (r.mine ? `<button class="quiet" id="colEdit">${ic('plus')} ${t(r.collections?.length ? 'col.edit' : 'col.add')}</button>` : '');
     $('#colEdit')?.addEventListener('click', async () => {
-      const known = [...new Set((await api('/api/recipes')).flatMap((x) => x.collections || []))].sort((a, b) => a.localeCompare(b, I18n.lang));
+      await S.refreshMe();
+      const known = [...new Set([...(S.me.collections || []), ...(await api('/api/recipes')).flatMap((x) => x.collections || [])])];
       const mineNow = new Set(r.collections || []);
       S.modal(`<h2 class="sec">${t('col.title')}</h2><form id="cf" class="stack">${known.map((n) => `<label class="pick"><input type="checkbox" value="${esc(n)}" ${mineNow.has(n) ? 'checked' : ''}><span>${esc(n)}</span></label>`).join('')}
         <label for="cn">${t('col.new')}</label><input id="cn" maxlength="40" autocomplete="off" placeholder="${esc(t('col.newPh'))}">

@@ -102,7 +102,7 @@ test('stores: an item remembers its store and aisle rules apply to new items', a
   let l = (await chris.put(`/api/lists/${listId}/settings`, { stores: [{ id: 'butcher', name: 'Butcher' }, { id: 'super', name: 'Supermarket' }] })).json;
   assert.equal(l.stores.length, 2);
   l = (await chris.put(`/api/lists/${listId}/settings`, { aisleStores: { meat: 'butcher' }, aisleOrder: ['produce', 'meat'] })).json;
-  assert.deepEqual(l.aisleOrder, ['produce', 'meat']);
+  assert.deepEqual(l.aisleOrder.slice(0, 2), ['produce', 'meat']); assert.equal(l.categories.length, 19);
   const added = (await chris.post(`/api/lists/${listId}/items`, { name: '500 g poulet haché' })).json;
   assert.equal(added.items.find((i) => i.key === 'ground chicken').store, 'butcher');
   const broc = added.items.find((i) => i.key === 'broccoli');
@@ -263,4 +263,49 @@ test('recipe collections: set by the owner, cleaned, ignored from guests', async
   await chris.put(`/api/recipes/${rid}/share`, { users: [sisId], households: [] });
   const g = await sis.put('/api/recipes/' + rid, { collections: ['Mine'] });
   assert.deepEqual(g.json.collections, ['Dinner', 'x'.repeat(40)], 'guests cannot recategorise');
+});
+
+test('each list has its own categories; changing one never touches another', async () => {
+  const groc = (await chris.get('/api/lists')).json.find((l) => l.auto);
+  const hw = (await chris.post('/api/lists', { name: 'Hardware store', template: 'hardware', lang: 'fr' })).json;
+  assert.equal(hw.auto, false);
+  assert.deepEqual(hw.categories.slice(0, 2).map((c) => c.name), ['Outils', 'Bois']);
+  // Nothing is recognised as a grocery aisle on a custom list.
+  let l = (await chris.post(`/api/lists/${hw.id}/items`, { name: 'Broccoli' })).json;
+  assert.equal(l.items[0].aisle, '');
+  const tools = hw.categories[0].id;
+  const patch = (id, b) => chris.call('PATCH', `/api/lists/${hw.id}/items/${id}`, b);
+  await patch(l.items[0].id, { aisle: tools });
+  assert.equal((await patch(l.items[0].id, { aisle: 'produce' })).json.aisle, tools, 'a category this list does not have is refused');
+  // The list remembers where "broccoli" goes, but only itself.
+  await patch(l.items[0].id, { checked: true });
+  await chris.post(`/api/lists/${hw.id}/clear-checked`);
+  l = (await chris.post(`/api/lists/${hw.id}/items`, { name: 'Broccoli' })).json;
+  assert.equal(l.items.at(-1).aisle, tools, 'memory is per list');
+  // Rename, add and delete categories.
+  const cats = [...l.categories.map((c) => (c.id === tools ? { ...c, name: 'Power tools' } : c)).filter((c) => c.name !== 'Bois'), { name: 'Cabinets', color: '#2F7D6B' }];
+  l = (await chris.put(`/api/lists/${hw.id}/settings`, { categories: cats })).json;
+  assert.ok(l.categories.some((c) => c.name === 'Power tools') && l.categories.at(-1).name === 'Cabinets' && !l.categories.some((c) => c.name === 'Bois'));
+  const after = (await chris.get('/api/lists')).json.find((x) => x.id === groc.id);
+  assert.deepEqual(after.categories.map((c) => c.id), groc.categories.map((c) => c.id), 'grocery list untouched');
+  // Deleting a category un-files its items instead of losing them.
+  l = (await chris.put(`/api/lists/${hw.id}/settings`, { categories: l.categories.filter((c) => c.id !== tools) })).json;
+  assert.ok(l.items.length && l.items.every((i) => i.aisle === ''));
+  // Blank and to-do templates.
+  assert.equal((await chris.post('/api/lists', { name: 'Blank', template: 'blank' })).json.categories.length, 0);
+  assert.deepEqual((await chris.post('/api/lists', { name: 'Todo', template: 'todo' })).json.categories.map((c) => c.name), ['Today', 'This week', 'Later']);
+});
+
+test('recipe collections can be ordered, renamed (merging) and deleted', async () => {
+  const mk = async (title, cols) => (await chris.post('/api/import/bulk/recipe', { title, ingredients: ['a'], steps: ['b'], collections: cols })).json.id;
+  const a = await mk('R1', ['Souper']), b = await mk('R2', ['Soupers', 'Rapide']);
+  await chris.put('/api/collections', { names: ['Rapide', 'Soupers', 'Vide'] });
+  assert.deepEqual((await chris.get('/api/me')).json.collections, ['Rapide', 'Soupers', 'Vide']);
+  const r = await chris.post('/api/collections/rename', { from: 'Souper', to: 'Soupers' });
+  assert.deepEqual((await chris.get('/api/recipes/' + a)).json.collections, ['Soupers']);
+  assert.deepEqual((await chris.get('/api/recipes/' + b)).json.collections, ['Soupers', 'Rapide']);
+  await chris.post('/api/collections/delete', { name: 'Soupers' });
+  assert.deepEqual((await chris.get('/api/recipes/' + b)).json.collections, ['Rapide']);
+  assert.deepEqual((await chris.get('/api/me')).json.collections, ['Rapide', 'Vide']);
+  assert.equal(r.status, 200);
 });

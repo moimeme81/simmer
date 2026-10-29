@@ -43,7 +43,7 @@ class Accounts {
   avatarUrl(u) { return u?.av ? `/avatars/${u.id}?v=${u.av}` : null; }
   setAvatar(id, version) { const u = this.user(id); if (u) { u.av = version; this.save(); } }
   publicUser(u) {
-    return u && { id: u.id, name: u.name, username: u.username, avatar: this.avatarUrl(u), admin: !!u.admin, lang: u.lang || null, cookStyle: u.cookStyle === 'page' ? 'page' : 'focus', autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id) };
+    return u && { id: u.id, name: u.name, username: u.username, avatar: this.avatarUrl(u), admin: !!u.admin, lang: u.lang || null, cookStyle: u.cookStyle === 'page' ? 'page' : 'focus', collections: u.collections || [], autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id) };
   }
   people() { return this.db.users.map((u) => ({ id: u.id, name: u.name, avatar: this.avatarUrl(u) })); }
   user(id) { return this.db.users.find((u) => u.id === id) || null; }
