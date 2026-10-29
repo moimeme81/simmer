@@ -48,7 +48,8 @@ async function fetchText(url, headers) {
 }
 
 /** Web-wide image results from DuckDuckGo (no key). It is an unofficial endpoint, so it can change without notice. */
-async function duckduckgo(q) {
+async function duckduckgo(q0) {
+  const q = q0 + ' food';
   const page = await fetchText('https://duckduckgo.com/?' + new URLSearchParams({ q, iax: 'images', ia: 'images' }), BROWSER);
   const vqd = /vqd=["']?([\d-]+)/.exec(page)?.[1];
   if (!vqd) throw new Error('no search token');
@@ -61,7 +62,8 @@ async function duckduckgo(q) {
 }
 
 /** Web-wide image results from Bing (no key), used alongside DuckDuckGo so one being rate-limited doesn't end the search. Unofficial. */
-async function bing(q) {
+async function bing(q0) {
+  const q = q0 + ' food';
   const html = await fetchText('https://www.bing.com/images/async?' + new URLSearchParams({ q, first: '0', count: '30', mmasync: '1', adlt: 'moderate' }), BROWSER);
   const out = [];
   for (const m of html.matchAll(/\sm="([^"]+)"/g)) {
@@ -74,20 +76,34 @@ async function bing(q) {
   return out.slice(0, 24);
 }
 
+const STOP = /^(the|a|an|and|with|of|in|on|for|to|easy|best|simple|quick|homemade|recipe|style|my|our|et|ou|de|du|des|d|la|le|les|l|un|une|au|aux|en|avec|pour|sur|dans|a|à)$/i;
+const plain = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const keywords = (q) => plain(q).split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.test(w));
+const stem = (w) => (w.length > 4 ? w.replace(/(es|s|e|x)$/, '') : w);
+
 /** Wordings to try, most specific first: "Pork Osso Buco" -> "Osso Buco" -> "Buco". */
 function variants(q) {
-  const stop = /^(the|a|an|and|with|of|in|easy|best|simple|quick|homemade|recipe|style|my|our)$/i;
-  const words = q.split(/\s+/).filter((w) => w && !stop.test(w));
+  const words = q.split(/\s+/).filter((w) => w && !STOP.test(plain(w)));
   const out = [q];
   for (const v of [words.join(' '), words.slice(-2).join(' '), words.slice(-1).join(' ')]) if (v && v.length > 2 && !out.some((o) => o.toLowerCase() === v.toLowerCase())) out.push(v);
   return out.slice(0, 4);
 }
 
-/** Runs one source over the wordings until one finds photos. Throws only when the source itself could not be reached. */
+/** Keeps only photos whose title or page mentions a word from the search, so unrelated results (a band for "poutine") never show. */
+function relevant(list, q) {
+  const words = keywords(q).map(stem);
+  if (!words.length) return list;
+  return list.filter((r) => {
+    const hay = plain([r.title, r.page, r.credit].join(' '));
+    return !r.title && !r.page ? true : words.some((w) => hay.includes(w));
+  });
+}
+
+/** Runs one source over the wordings until one finds relevant photos. Throws only when the source itself could not be reached. */
 async function trySource(fn, q) {
   let failure = null;
   for (const v of variants(q)) {
-    try { const r = await fn(v); if (r.length) return r; }
+    try { const r = relevant(await fn(v), v); if (r.length) return r; }
     catch (e) { failure = e; if (/timed out|ENOTFOUND|EAI_AGAIN|ECONN/.test(String(e.message))) break; }   // unreachable: don't retry
   }
   if (failure) throw failure;
