@@ -351,3 +351,36 @@ ol.cats input:not([type=color]){flex:1;min-width:0}
 .xrow:first-child{border-top:0}
 .xrow button{flex:none}
 .xrow .muted{font-size:15px}
+
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-right:8px}
+.seg button{border:0;border-radius:0;min-height:44px;padding:6px 14px;background:var(--surface)}
+.seg button[aria-pressed="true"]{background:var(--brand);color:#fff;font-weight:700}
+.mcal{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.mhead,.mbody{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.mhead span{padding:8px 6px;text-align:center;font-weight:700;color:var(--mute);font-size:14px;border-bottom:1px solid var(--line)}
+.mday{min-height:112px;padding:4px 5px 6px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
+.mday:nth-child(7n){border-right:0}
+.mday.out{background:var(--bg);opacity:.62}
+.mday.today{box-shadow:inset 0 0 0 2px var(--brand)}
+.mtop{display:flex;justify-content:space-between;align-items:center}
+.mnum{border:0;background:none;min-width:32px;min-height:32px;padding:0 6px;font-weight:700;border-radius:16px;cursor:pointer}
+.mday.today .mnum{background:var(--brand);color:#fff}
+.mday .addm{opacity:.35;min-width:32px;min-height:32px;width:32px;padding:0}
+.mday:hover .addm{opacity:1}
+.mlist{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mchip{display:flex;align-items:center;gap:5px;border:0;background:var(--bg);border-radius:8px;padding:3px 6px;min-height:26px;text-align:left;cursor:pointer;min-width:0;font-size:14px}
+.mchip.guest{font-style:italic}
+.mchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mmore{border:0;background:none;color:var(--mute);font-size:13px;text-align:left;padding:2px 6px;cursor:pointer}
+.sd{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none;background:#8a8f98}
+.s-breakfast{background:#e0a526}.s-lunch{background:#3f9d6b}.s-dinner{background:#1f4e9c}.s-snack{background:#b4568f}
+.mdots{display:none;gap:3px;justify-content:center}
+@media (max-width:640px){
+  .mday{min-height:62px;padding:2px}
+  .mlist{display:none}
+  .mdots{display:flex;flex-wrap:wrap}
+  .mday .addm{display:none}
+  .mnum{margin:0 auto}
+  .mtop{justify-content:center}
+}
+@media (max-width:640px){.seg{margin-right:4px}.seg button{padding:6px 10px}.planhead .row{gap:6px}}

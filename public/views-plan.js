@@ -6,6 +6,10 @@
   const mondayOf = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
   const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
   let weekStart = mondayOf(new Date());
+  let mode = 'week';
+  try { mode = localStorage.getItem('simmer-plan-mode') === 'month' ? 'month' : 'week'; } catch { /* default */ }
+  let monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const lang = () => (I18n.lang === 'fr' ? 'fr-CA' : 'en-CA');
   let recipes = null;
   const loadRecipes = async () => (recipes = recipes || (await api('/api/recipes')));
   const yieldNumber = (y) => Scale.parseYield(y);
@@ -62,10 +66,13 @@
   };
 
   S.views.plan = async () => {
-    const from = S.ymd(weekStart), to = S.ymd(addDays(weekStart, 6));
+    const isMonth = mode === 'month';
+    const gridStart = isMonth ? mondayOf(monthStart) : weekStart;
+    const gridEnd = isMonth ? addDays(mondayOf(new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0)), 6) : addDays(weekStart, 6);
+    const from = S.ymd(gridStart), to = S.ymd(gridEnd);
     const [meals] = await Promise.all([api(`/api/meals?from=${from}&to=${to}`), S.refreshMe()]);
     const todayStr = S.ymd(new Date());
-    const days = Array.from({ length: 7 }, (_, n) => addDays(weekStart, n));
+    const days = Array.from({ length: Math.round((gridEnd - gridStart) / 864e5) + 1 }, (_, n) => addDays(gridStart, n));
     const refresh = () => S.views.plan();
     const mealCard = (m) => {
       const hh = (m.householdNames || (m.sharedWith.households || []).map((h) => S.me.households.find((x) => x.id === h)?.name)).filter(Boolean);
@@ -77,25 +84,41 @@
         ${!m.mine ? `<small class="by">${esc(t('meal.from', { name: m.ownerName }))}${withNames.length ? esc(' · ' + t('meal.withLower', { names: withNames.join(', ') })) : ''}</small>` : ''}
         ${(m.attendees || []).length > 1 || hh.length ? `<span class="faces" title="${esc(t('meal.with', { names: [...(m.attendees || []).map((a) => a.you ? t('acct.you') : a.name), ...hh].join(', ') }))}">${(m.attendees || []).map((a) => S.avatar(a, 24)).join('')}${hh.map((n) => `<span class="hhtag">${esc(n)}</span>`).join('')}</span>` : ''}</button>`;
     };
+    const monthName = monthStart.toLocaleDateString(lang(), { month: 'long', year: 'numeric' });
+    const chip = (m) => `<button class="mchip ${m.mine ? '' : 'guest'}" data-m="${m.id}" title="${esc(t('slot.' + m.slot) + ': ' + m.title)}"><i class="sd s-${m.slot}"></i><span>${esc(m.title)}</span></button>`;
+    const monthGrid = () => `<div class="mcal"><div class="mhead">${days.slice(0, 7).map((d) => `<span>${esc(S.weekday(d, 'short'))}</span>`).join('')}</div><div class="mbody">${days.map((d) => {
+      const key = S.ymd(d), ms = meals.filter((m) => m.date === key).sort((a, b) => SLOTS.indexOf(a.slot) - SLOTS.indexOf(b.slot));
+      const out = d.getMonth() !== monthStart.getMonth();
+      return `<div class="mday ${key === todayStr ? 'today' : ''} ${out ? 'out' : ''}" data-d="${key}">
+        <div class="mtop"><button class="mnum" data-week="${key}" aria-label="${esc(S.dateLabel(d))}">${d.getDate()}</button><button class="addm" data-add="${key}" aria-label="${esc(t('plan.add'))} ${esc(S.dateLabel(d))}">${ic('plus')}</button></div>
+        <div class="mlist">${ms.slice(0, 3).map(chip).join('')}${ms.length > 3 ? `<button class="mmore" data-week="${key}">${esc(t('plan.more', { n: ms.length - 3 }))}</button>` : ''}</div>
+        ${ms.length ? `<span class="mdots" aria-hidden="true">${ms.slice(0, 4).map((m) => `<i class="sd s-${m.slot}"></i>`).join('')}</span>` : ''}</div>`;
+    }).join('')}</div></div>`;
     S.app.innerHTML = `
       <div class="row between wrap planhead">
         <h1 class="rtitle" style="margin:0;font-size:30px">${t('plan.title')}</h1>
-        <div class="row"><button id="prev" aria-label="${esc(t('plan.prev'))}">${ic('up').replace('<path d="m6 15 6-6 6 6"/>', '<path d="m15 6-6 6 6 6"/>')}</button>
+        <div class="row"><span class="seg" role="group"><button id="mw" aria-pressed="${!isMonth}">${t('plan.week')}</button><button id="mm" aria-pressed="${isMonth}">${t('plan.month')}</button></span>
+          <button id="prev" aria-label="${esc(t('plan.prev'))}">${ic('up').replace('<path d="m6 15 6-6 6 6"/>', '<path d="m15 6-6 6 6 6"/>')}</button>
           <button id="now">${t('plan.today')}</button>
           <button id="next" aria-label="${esc(t('plan.next'))}">${ic('up').replace('<path d="m6 15 6-6 6 6"/>', '<path d="m9 6 6 6-6 6"/>')}</button></div>
       </div>
-      <p class="muted" style="margin:6px 0 16px">${esc(S.dateLabel(days[0]))} – ${esc(S.dateLabel(days[6]))}</p>
-      <div class="week">${days.map((d) => {
+      <p class="muted" style="margin:6px 0 16px">${esc(isMonth ? monthName : `${S.dateLabel(days[0])} – ${S.dateLabel(days[6])}`)}</p>
+      ${isMonth ? monthGrid() : `<div class="week">${days.map((d) => {
         const key = S.ymd(d), ms = meals.filter((m) => m.date === key).sort((a, b) => SLOTS.indexOf(a.slot) - SLOTS.indexOf(b.slot));
         return `<section class="day ${key === todayStr ? 'today' : ''}" data-d="${key}">
           <header><b><span class="wl">${esc(S.weekday(d))}</span><span class="ws">${esc(S.weekday(d, 'short'))}</span></b><span class="dl">${esc(S.dateLabel(d))}</span><button class="addm" data-add="${key}" aria-label="${esc(t('plan.add'))} ${esc(S.weekday(d))}">${ic('plus')}</button></header>
           ${ms.map(mealCard).join('') || `<p class="muted none">${t('plan.empty')}</p>`}</section>`;
-      }).join('')}</div>
-      <div class="cta" style="margin-top:20px"><button id="tolist" ${meals.some((m) => m.recipe) ? '' : 'disabled'}>${ic('basket')} ${t('plan.toList')}</button></div>`;
+      }).join('')}</div>`}
+      <div class="cta" style="margin-top:20px"><button id="tolist" ${meals.some((m) => m.recipe) ? '' : 'disabled'}>${ic('basket')} ${t(isMonth ? 'plan.toListMonth' : 'plan.toList')}</button></div>`;
 
-    $('#prev').onclick = () => { weekStart = addDays(weekStart, -7); refresh(); };
-    $('#next').onclick = () => { weekStart = addDays(weekStart, 7); refresh(); };
-    $('#now').onclick = () => { weekStart = mondayOf(new Date()); refresh(); };
+    const setMode = (m) => { mode = m; try { localStorage.setItem('simmer-plan-mode', m); } catch { /* fine */ } if (m === 'month') monthStart = new Date(weekStart.getFullYear(), weekStart.getMonth(), 1); refresh(); };
+    $('#mw').onclick = () => setMode('week');
+    $('#mm').onclick = () => setMode('month');
+    S.app.querySelectorAll('[data-week]').forEach((b) => (b.onclick = () => { weekStart = mondayOf(S.parseYmd(b.dataset.week)); mode = 'week'; refresh(); }));
+    const step = (n) => { if (isMonth) monthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + n, 1); else weekStart = addDays(weekStart, 7 * n); refresh(); };
+    $('#prev').onclick = () => step(-1);
+    $('#next').onclick = () => step(1);
+    $('#now').onclick = () => { weekStart = mondayOf(new Date()); monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1); refresh(); };
     S.app.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => S.mealSheet({ date: b.dataset.add }, refresh)));
     S.app.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => S.mealSheet({ meal: meals.find((m) => m.id === b.dataset.m) }, refresh)));
     $('#tolist').onclick = async () => {
@@ -106,7 +129,7 @@
         $('[data-x]', el).onclick = close;
         $('#tl', el).onsubmit = async (e) => {
           e.preventDefault();
-          const r = await S.post('/api/meals/to-list', { from, to, listId: $('#tls', el).value, lang: I18n.lang });
+          const r = await S.post('/api/meals/to-list', { from: isMonth ? S.ymd(monthStart) : from, to: isMonth ? S.ymd(new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0)) : to, listId: $('#tls', el).value, lang: I18n.lang });
           $('#tlm', el).textContent = t('plan.listed', { n: r.added, list: S.listName(r.list) }); $('#tlm', el).hidden = false;
         };
       });
