@@ -33,7 +33,7 @@
         ${mine ? `<h3 class="sub">${t('meal.share')}</h3><p class="muted" style="margin:0">${t('meal.shareHelp')}</p><div id="msh">${S.shareFields(share, 'meal')}</div>` : `<p class="muted">${t('meal.from', { name: m.ownerName })}</p>`}
         <p class="err" id="merr" hidden></p>
         <div class="row between wrap">
-          <span class="row">${m ? `<button type="button" class="quiet" data-del>${t(mine ? 'meal.remove' : 'meal.removeMine')}</button>` : ''}${m?.recipe ? `<a class="btnlike" href="#/r/${m.recipe.id}" data-x>${t('meal.open')}</a>` : ''}</span>
+          <span class="row">${m ? `<button type="button" class="quiet" data-del>${t(mine ? 'meal.remove' : 'meal.removeMine')}</button>` : ''}${m?.recipe ? `<a class="btnlike" href="#/r/${m.recipe.id}?meal=${m.id}" data-x>${t('meal.open')}</a>` : ''}</span>
           <span class="row"><button type="button" class="quiet" data-x>${t('share.cancel')}</button>${mine ? `<button class="primary">${t('share.save')}</button>` : ''}</span></div>
       </form>`, (el, close) => {
       el.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', close));

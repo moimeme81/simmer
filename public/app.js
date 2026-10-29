@@ -67,30 +67,6 @@ document.addEventListener('click', (e) => {
   b.classList.add('started'); setTimeout(() => b.classList.remove('started'), 1500);
 });
 
-/* ---------- choosing a list (remembers your last pick) ---------- */
-const lastList = () => { try { return localStorage.getItem('simmer-addlist') || ''; } catch { return ''; } };
-/** Resolves with the chosen list, or null when dismissed. One tap when you have a single list. */
-async function pickList(title) {
-  const ls = await api('/api/lists');
-  if (ls.length === 1) return ls[0];
-  return new Promise((done) => {
-    let chosen = null;
-    const last = lastList();
-    const ordered = [...ls.filter((l) => l.id === last), ...ls.filter((l) => l.id !== last)];
-    const close = S.modal(`<h2 class="sec">${esc(title)}</h2><div class="stack pickl">${ordered.map((l) => `<button class="pickrow" data-l="${l.id}">${S.listBadge(l, 36)}<span>${esc(S.listName(l))}</span></button>`).join('')}</div>
-      <div class="row end" style="margin-top:12px"><button class="quiet" data-x>${t('share.cancel')}</button></div>`, (el, c) => {
-      $('[data-x]', el).onclick = c;
-      el.querySelectorAll('[data-l]').forEach((b) => (b.onclick = () => { chosen = ls.find((l) => l.id === b.dataset.l); try { localStorage.setItem('simmer-addlist', chosen.id); } catch { /* private mode */ } c(); }));
-      new MutationObserver((_, o) => { if (!el.isConnected) { o.disconnect(); done(chosen); } }).observe(document.body, { childList: true });
-    });
-    void close;
-  });
-}
-
-function flashNote(msg) {
-  const n = document.createElement('div'); n.className = 'toast'; n.setAttribute('role', 'status'); n.textContent = msg; document.body.appendChild(n); setTimeout(() => n.remove(), 2200);
-}
-
 /* ---------- recipes being cooked right now (several at once) ---------- */
 const sessions = {
   read() { try { return JSON.parse(localStorage.getItem('simmer-cooking') || '{}'); } catch { return {}; } },
@@ -152,44 +128,51 @@ async function home() {
 }
 
 /* ---------- recipe ---------- */
-async function recipe(id, startCooking) {
-  const r = await api('/api/recipes/' + id);
+async function recipe(id, opts = {}) {
+  const [r, meal] = await Promise.all([api('/api/recipes/' + id), opts.meal ? api('/api/meals/' + opts.meal).catch(() => null) : null]);
+  const forMeal = meal && meal.recipeId === id ? meal : null;
   curTitle = r.title;
   const lang = I18n.lang;
   const base = Scale.parseYield(r.yield);
-  let target = base, factor = 1;
+  let target = forMeal?.servings && base ? forMeal.servings : base, factor = 1;
   const checked = new Set();
+  const page = (S.me?.cookStyle || 'focus') === 'page';
+  let cookingHere = !!opts.cook && page;     // in "on the page" mode the page becomes the cooking screen
   const sc = (line) => Scale.scaleLine(line, factor, { lang });
   const st = { r, sc: (l) => sc(l), checked };
+  const mealDate = forMeal ? S.dateLabel(S.parseYmd(forMeal.date), { weekday: 'short', month: 'short', day: 'numeric' }) : '';
   const facts = () => [[t('recipe.prep'), mins(r.prepMinutes)], [t('recipe.cook'), mins(r.cookMinutes)], [t('recipe.total'), mins(r.totalMinutes)], [t('recipe.serves'), r.yield ? sc(r.yield) : null]].filter((x) => x[1]);
 
   app.innerHTML = `
     <a class="back" href="#/">${t('recipe.back')}</a>
     ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : r.mine && /^https?:/.test(r.sourceUrl || '') ? `<div class="nophoto">${ic('image')}<span>${t('photo.missingHere')}</span><button id="findPhoto">${t('photo.find')}</button><small class="err" id="fpErr" hidden></small></div>` : ''}
     <h1 class="rtitle">${esc(r.title)}</h1>
+    ${forMeal ? `<p class="mealbanner">${ic('cal')} <span>${esc(t('recipe.forMeal', { date: mealDate, slot: t('slot.' + forMeal.slot) }))}${forMeal.servings ? ' · ' + esc(t('recipe.mealServings', { n: forMeal.servings })) : ''}</span></p>` : ''}
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
     <div class="chips colrow" id="colrow"></div>
     <div class="facts" id="facts"></div>
-    <div class="cta"><button class="primary" id="cookBtn">${t('recipe.cookBtn')}</button><button id="toList">${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
+    <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
     <p class="muted sharedline" id="sharedline">${esc(r.mine ? S.shareText(r) : t('recipe.guest', { name: r.ownerName }))}</p>
     <div class="rbody">
       <aside><h2 class="sec">${t('recipe.ingredients')}</h2><div class="scaler" id="scaler"></div><ul class="ing" id="ing"></ul></aside>
-      <section><h2 class="sec">${t('recipe.method')}</h2><ol class="steps">${r.steps.map((s, n) => `<li>${stepHTML(s, n + 1)}</li>`).join('')}</ol>
+      <section><h2 class="sec">${t('recipe.method')}</h2><ol class="steps" id="steps"></ol>
         <h2 class="sec" style="margin-top:26px">${t('recipe.notes')}</h2><textarea id="notes" placeholder="${esc(t('recipe.notesPh'))}">${esc(r.notes)}</textarea></section>
     </div>`;
 
+  const drawCook = () => {
+    $('#cookBtn').innerHTML = cookingHere ? t('cook.finish') : t('recipe.cookBtn');
+    $('#steps').innerHTML = r.steps.map((s, n) => `<li>${cookingHere ? stepHTML(s, n + 1) : esc(s)}</li>`).join('');
+    $('#ing').classList.toggle('plain-ing', !cookingHere);
+    $('#ing').innerHTML = r.ingredients.map((i, n) => cookingHere
+      ? `<li><label><input type="checkbox" data-n="${n}" ${checked.has(n) ? 'checked' : ''}><span>${esc(sc(i))}</span></label></li>`
+      : `<li><span>${esc(sc(i))}</span></li>`).join('');
+    $('#ing').querySelectorAll('input').forEach((c) => (c.onchange = () => (c.checked ? checked.add(+c.dataset.n) : checked.delete(+c.dataset.n))));
+  };
   const draw = () => {
     factor = base ? target / base : factor;
     $('#facts').innerHTML = facts().map(([k, v]) => `<div class="fact"><span>${k}</span><b>${esc(v)}</b></div>`).join('') +
       `<div class="src">${t('recipe.from')} ${r.sourceUrl ? `<a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.host)}</a>` : esc(r.host)}</div>`;
-    $('#ing').innerHTML = r.ingredients.map((i, n) => `<li><label><input type="checkbox" data-n="${n}" ${checked.has(n) ? 'checked' : ''}><span>${esc(sc(i))}</span></label><button class="quiet addone" data-add="${n}" aria-label="${esc(t('recipe.addOne'))}: ${esc(i)}" title="${esc(t('recipe.addOne'))}">${ic('plus')}</button></li>`).join('');
-    $('#ing').querySelectorAll('[data-add]').forEach((b) => (b.onclick = async () => {
-      const to = await pickList(t('recipe.addOneTo')); if (!to) return;
-      await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: [sc(r.ingredients[+b.dataset.add])] } });
-      b.innerHTML = ic('check'); b.classList.add('ok'); b.title = t('recipe.added', { n: 1, list: S.listName(to) });
-      flashNote(t('recipe.added', { n: 1, list: S.listName(to) }));
-    }));
-    $('#ing').querySelectorAll('input').forEach((c) => (c.onchange = () => (c.checked ? checked.add(+c.dataset.n) : checked.delete(+c.dataset.n))));
+    drawCook();
     const box = $('#scaler');
     if (base) {
       const shown = Number.isInteger(target) ? target : Math.round(target * 10) / 10;
@@ -204,6 +187,7 @@ async function recipe(id, startCooking) {
     }
   };
   draw();
+  if (cookingHere) sessions.set(id, { title: r.title, step: 0, total: r.steps.length || 1 });
   const drawCols = () => {
     $('#colrow').innerHTML = (r.collections || []).map((c) => `<span class="chip">${esc(c)}</span>`).join('') + (r.mine ? `<button class="quiet" id="colEdit">${ic('plus')} ${t(r.collections?.length ? 'col.edit' : 'col.add')}</button>` : '');
     $('#colEdit')?.addEventListener('click', async () => {
@@ -230,16 +214,61 @@ async function recipe(id, startCooking) {
   $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));
   $('#findPhoto')?.addEventListener('click', async (e) => {
     const b = e.target; b.disabled = true; b.textContent = t('photo.finding'); $('#fpErr').hidden = true;
-    try { await S.post(`/api/recipes/${id}/find-photo`); recipe(id); }
+    try { await S.post(`/api/recipes/${id}/find-photo`); recipe(id, opts); }
     catch (x) { b.disabled = false; b.textContent = t('photo.find'); $('#fpErr').textContent = x.message; $('#fpErr').hidden = false; }
   });
-  $('#cookBtn').onclick = () => cook(st);
-  if (startCooking) { history.replaceState(null, '', '#/r/' + id); cook(st); }
+
+  /* Start cooking: full screen or on this page, whichever the person chose in their account. */
+  $('#cookBtn').onclick = () => {
+    if (!page) return cook(st);
+    cookingHere = !cookingHere;
+    if (cookingHere) sessions.set(id, { title: r.title, step: 0, total: r.steps.length || 1 }); else sessions.end(id);
+    drawCook();
+  };
+  if (opts.cook) { history.replaceState(null, '', '#/r/' + id + (opts.meal ? '?meal=' + opts.meal : '')); if (!page) cook(st); }
+
+  /* Add ingredients to lists: pick a list first, then the ingredients for it. Repeat for other lists. */
+  const added = {};   // ingredient index -> names of lists it went to
   $('#toList').onclick = async () => {
-    const lines = r.ingredients.map((i, n) => (checked.has(n) ? null : sc(i))).filter(Boolean);
-    const to = await pickList(t('recipe.pickList')); if (!to) return;
-    await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: lines } });
-    $('#toList').textContent = t('recipe.added', { n: lines.length, list: S.listName(to) });
+    const lists = await api('/api/lists');
+    const note = forMeal ? t('recipe.forDate', { date: mealDate }) : '';
+    let justAdded = '';
+    S.modal('<div id="tlb"></div>', (el, close) => {
+      const body = $('#tlb', el);
+      const chooseList = () => {
+        body.innerHTML = `<h2 class="sec">${t('recipe.toList')}</h2>
+          <p class="muted" style="margin:0 0 10px">${esc(forMeal ? t('recipe.pickWhichMeal', { date: mealDate, n: Math.round(target) || '' }) : t('recipe.pickWhich'))}</p>
+          ${justAdded ? `<p class="ok">${esc(justAdded)}</p>` : ''}
+          <div class="stack pickl">${lists.map((l) => `<button class="pickrow" data-l="${l.id}">${S.listBadge(l, 36)}<span>${esc(S.listName(l))}</span></button>`).join('')}</div>
+          <div class="row end" style="margin-top:12px"><button class="primary" data-x>${t('recipe.listDone')}</button></div>`;
+        $('[data-x]', body).onclick = close;
+        body.querySelectorAll('[data-l]').forEach((b) => (b.onclick = () => chooseItems(lists.find((l) => l.id === b.dataset.l))));
+      };
+      const chooseItems = (to) => {
+        body.innerHTML = `<div class="row"><button class="quiet" data-back aria-label="${esc(t('recipe.backToLists'))}">${ic('back')}</button><h2 class="sec" style="margin:0">${S.listBadge(to, 28)} ${esc(S.listName(to))}</h2></div>
+          <p class="muted" style="margin:8px 0">${esc(t('recipe.pickItems'))}${note ? ' · ' + esc(note) : ''}</p>
+          <div class="row"><button type="button" class="quiet" data-all>${t('recipe.selectAll')}</button><button type="button" class="quiet" data-none>${t('recipe.selectNone')}</button></div>
+          <ul class="ing pickings">${r.ingredients.map((i, n) => `<li><label><input type="checkbox" data-n="${n}"><span>${esc(sc(i))}</span></label>${added[n]?.length ? `<small class="chip soft">✓ ${esc(added[n].join(', '))}</small>` : ''}</li>`).join('')}</ul>
+          <div class="row end" style="margin-top:12px"><button class="primary" id="addN" disabled></button></div>`;
+        const boxes = [...body.querySelectorAll('input[type=checkbox]')];
+        const sync = () => { const n = boxes.filter((c) => c.checked).length; const b = $('#addN', body); b.disabled = !n; b.textContent = t('recipe.addN', { n, list: S.listName(to) }); };
+        boxes.forEach((c) => (c.onchange = sync));
+        $('[data-all]', body).onclick = () => { boxes.forEach((c) => (c.checked = true)); sync(); };
+        $('[data-none]', body).onclick = () => { boxes.forEach((c) => (c.checked = false)); sync(); };
+        $('[data-back]', body).onclick = chooseList;
+        $('#addN', body).onclick = async () => {
+          const picked = boxes.filter((c) => c.checked).map((c) => +c.dataset.n);
+          $('#addN', body).disabled = true;
+          const fresh = await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: picked.map((n) => sc(r.ingredients[n])), note } });
+          lists[lists.findIndex((l) => l.id === to.id)] = fresh;
+          for (const n of picked) (added[n] = added[n] || []).push(S.listName(to));
+          justAdded = t('recipe.added', { n: picked.length, list: S.listName(to) });
+          chooseList();
+        };
+        sync();
+      };
+      chooseList();
+    });
   };
 }
 
@@ -381,9 +410,9 @@ function route() {
   const join = h.match(/^#\/join\/([\w-]+)/);
   if (join && !S.me) { S.authScreen('join', join[1]); return; }
   chrome(); dockSig = ''; renderDock(); renderCookBar();
-  const m = h.match(/^#\/r\/([\w-]+)(\/cook)?/);
+  const m = h.match(/^#\/r\/([\w-]+)(\/cook)?(?:\?meal=([\w-]+))?/);
   const view = h.startsWith('#/lists') ? () => S.views.lists((h.match(/^#\/lists\/([\w-]+)/) || [])[1]) : h.startsWith('#/plan') ? () => S.views.plan() : h.startsWith('#/account') ? () => S.views.account()
-    : h.startsWith('#/import') ? importView : m ? () => recipe(m[1], !!m[2]) : home;
+    : h.startsWith('#/import') ? importView : m ? () => recipe(m[1], { cook: !!m[2], meal: m[3] }) : home;
   view().catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`));
   scrollTo(0, 0);
 }

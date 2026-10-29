@@ -338,7 +338,7 @@ app.post('/api/recipes/:id/to-list', wrap((req, res) => {
   const listId = req.body?.listId || lists.all().find((l) => acc.canAccess(me(req), l))?.id;
   if (!listId) throw notFound();
   listFor({ params: { id: listId }, user: req.user });
-  res.json(listView(req, lists.addItems(listId, lines.map((name) => ({ name, details: r.title })), { skipStaples: true })));
+  res.json(listView(req, lists.addItems(listId, lines.map((name) => ({ name, details: [r.title, str(req.body?.note, 80).trim()].filter(Boolean).join(' · ') })), { skipStaples: true })));
 }));
 
 /* ---------- meal plan ---------- */
@@ -360,6 +360,7 @@ const mealFor = (req) => { const m = meals.get(req.params.id); if (!m || !acc.ca
 const grantRecipe = (m, share) => { if (m.recipeId && store.get(m.recipeId)) store.grant(m.recipeId, share); };
 
 app.get('/api/meals', (req, res) => res.json(visibleMeals(req, str(req.query.from, 10), str(req.query.to, 10)).map((m) => mealView(req, m))));
+app.get('/api/meals/:id', wrap((req, res) => res.json(mealView(req, mealFor(req)))));
 app.post('/api/meals', wrap((req, res) => {
   const b = req.body || {};
   if (b.recipeId) { const r = store.get(b.recipeId); if (!r || !acc.canAccess(me(req), r)) throw fail(400, 'Recipe not found'); }
@@ -397,7 +398,8 @@ app.post('/api/meals/to-list', wrap((req, res) => {
     const base = Scale.parseYield(r.yield);
     const factor = base && m.servings ? m.servings / base : 1;
     const lines = r.ingredients.map((i) => Scale.scaleLine(i, factor, { lang }));
-    lists.addItems(listId, lines.map((name) => ({ name, details: r.title })), { skipStaples: true });
+    const when = new Date(m.date + 'T12:00:00').toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+    lists.addItems(listId, lines.map((name) => ({ name, details: `${r.title} · ${lang === 'fr' ? 'pour' : 'for'} ${when}` })), { skipStaples: true });
     added += lines.length;
   }
   res.json({ added, list: listView(req, lists.get(listId)) });

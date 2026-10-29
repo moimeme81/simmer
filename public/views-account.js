@@ -65,6 +65,8 @@
               <p class="muted" style="margin:6px 0 0">@${esc(me.username)}${me.admin ? ` · ${t('acct.admin')}` : ''}</p>
               <p id="pfm" hidden></p>
               <div class="row"><button class="primary">${t('acct.save')}</button><button type="button" id="out" class="quiet">${t('auth.logout')}</button></div></form>
+            <h2 class="sec" style="margin-top:22px">${t('cook.interface')}</h2>
+            <form id="cs" class="stack">${[['focus', 'cook.focus'], ['page', 'cook.page']].map(([v, k]) => `<label class="pick"><input type="radio" name="cs" value="${v}" ${(me.cookStyle || 'focus') === v ? 'checked' : ''}><span>${t(k)}</span></label>`).join('')}</form>
             <h2 class="sec" style="margin-top:22px">${t('acct.password')}</h2>
             <form id="pw"><label for="pc">${t('acct.current')}</label><input id="pc" type="password" autocomplete="current-password" required>
               <label for="pnw">${t('acct.new')}</label><input id="pnw" type="password" autocomplete="new-password" minlength="8" required>
@@ -128,6 +130,7 @@
         try { await S.put('/api/me/avatar', { image: await S.squarePhoto(f) }); await reload(); S.chrome?.(); } catch (x) { flash($('#phm'), x.name === 'InvalidStateError' || !x.message ? t('acct.photoBad') : x.message, true); }
       };
       $('#phx')?.addEventListener('click', async () => { await S.del('/api/me/avatar'); await reload(); S.chrome?.(); });
+      $('#cs').onchange = async (e) => { await S.put('/api/me', { cookStyle: e.target.value }); await S.refreshMe(); Object.assign(me, S.me); };
       $('#out').onclick = async () => { await S.post('/api/auth/logout'); S.boot(); };
       $('#pw').onsubmit = async (e) => {
         e.preventDefault();

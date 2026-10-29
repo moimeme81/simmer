@@ -63,7 +63,7 @@ docker compose up -d --build
 - **Profile pictures**: add one on the Account page. It is cropped square and shrunk in the browser, and shown in the menu, households, share dialogs and on shared meals.
 - **Collections**: tag recipes (Dinner, Desserts…) from the recipe page and filter the recipe box by them. The AnyList import brings your collections along.
 - **Cooking**: nothing starts until you press *Start cooking*. You can cook several recipes at once: each shows in a “Cooking now” bar with its step, and timers are labelled with their recipe.
-- **Adding ingredients**: use the + beside an ingredient to send just that one to a list you pick.
+- **Recipe page**: opens as a read-only overview (add to meal plan, add to a list, start cooking). Opened from the meal plan it shows the planned date and scales to the planned servings. *Add ingredients to a list* is list first: pick a list, tick its ingredients, add, then pick another list. Items say which meal and date they are for. Each person chooses in Account whether *Start cooking* is full screen or on the recipe page.
 - **List items**: tap a line to cross it off, tap the pencil to edit.
 - **Shared meals** show everyone invited, across households, in each person's own meal plan.
 

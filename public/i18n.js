@@ -68,6 +68,10 @@
   // Accounts, sharing, aisles, stores, meal plan.
   const MORE = {
     en: {
+      'recipe.forMeal': 'In your meal plan: {date}, {slot}', 'recipe.mealServings': '{n} servings', 'recipe.forDate': 'for {date}', 'recipe.pickWhich': 'Pick a list, then choose the ingredients that go on it.',
+      'recipe.pickWhichMeal': 'Pick a list, then choose the ingredients. Amounts are for {n} servings and the items will say they are for {date}.', 'recipe.pickItems': 'Choose the ingredients for this list',
+      'recipe.selectAll': 'Select all', 'recipe.selectNone': 'Select none', 'recipe.addN': 'Add {n} to {list}', 'recipe.listDone': 'Done', 'recipe.backToLists': 'Back to lists',
+      'cook.interface': 'When I start cooking', 'cook.focus': 'Full screen, one step at a time', 'cook.page': 'On the recipe page, with its timers and checklist',
       'col.title': 'Collections', 'col.all': 'All', 'col.add': 'Add to a collection', 'col.edit': 'Collections', 'col.new': 'New collection', 'col.newPh': 'Dinner, Desserts…',
       'cook.now': 'Cooking now', 'cook.end': 'Stop cooking', 'recipe.addOne': 'Add to a list', 'recipe.addOneTo': 'Add to which list?', 'lists.edit': 'Edit',
       'lists.create': 'New list', 'lists.newTitle': 'New list', 'lists.search': 'Search lists', 'lists.back': 'All lists', 'lists.noMatch': 'No list matches.',
@@ -123,6 +127,10 @@
       'aisle.personal': 'Personal care', 'aisle.pets': 'Pets', 'aisle.other': 'Other',
     },
     fr: {
+      'recipe.forMeal': 'Dans votre menu : {date}, {slot}', 'recipe.mealServings': '{n} portions', 'recipe.forDate': 'pour {date}', 'recipe.pickWhich': 'Choisissez une liste, puis les ingrédients qui s’y ajoutent.',
+      'recipe.pickWhichMeal': 'Choisissez une liste, puis les ingrédients. Les quantités sont pour {n} portions et les articles indiqueront qu’ils sont pour {date}.', 'recipe.pickItems': 'Choisissez les ingrédients pour cette liste',
+      'recipe.selectAll': 'Tout sélectionner', 'recipe.selectNone': 'Tout désélectionner', 'recipe.addN': 'Ajouter {n} à {list}', 'recipe.listDone': 'Terminé', 'recipe.backToLists': 'Retour aux listes',
+      'cook.interface': 'Quand je commence à cuisiner', 'cook.focus': 'Plein écran, une étape à la fois', 'cook.page': 'Sur la page de la recette, avec ses minuteries et sa liste à cocher',
       'col.title': 'Collections', 'col.all': 'Toutes', 'col.add': 'Ajouter à une collection', 'col.edit': 'Collections', 'col.new': 'Nouvelle collection', 'col.newPh': 'Soupers, Desserts…',
       'cook.now': 'En cuisson', 'cook.end': 'Arrêter la cuisson', 'recipe.addOne': 'Ajouter à une liste', 'recipe.addOneTo': 'Ajouter à quelle liste ?', 'lists.edit': 'Modifier',
       'lists.create': 'Nouvelle liste', 'lists.newTitle': 'Nouvelle liste', 'lists.search': 'Chercher une liste', 'lists.back': 'Toutes les listes', 'lists.noMatch': 'Aucune liste ne correspond.',
