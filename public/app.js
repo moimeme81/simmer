@@ -189,7 +189,7 @@ async function recipe(id, opts = {}) {
 
   app.innerHTML = `
     <a class="back" href="#/">${t('recipe.back')}</a>
-    ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : r.mine && /^https?:/.test(r.sourceUrl || '') ? `<div class="nophoto">${ic('image')}<span>${t('photo.missingHere')}</span><button id="findPhoto">${t('photo.find')}</button><small class="err" id="fpErr" hidden></small></div>` : ''}
+    ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">${r.imageCredit ? `<small class="muted credit">${t('photo.credit')} ${esc(r.imageCredit)}</small>` : ''}` : r.mine ? `<div class="nophoto">${ic('image')}<span>${t('photo.missingHere')}</span>${/^https?:/.test(r.sourceUrl || '') ? `<button id="findPhoto">${t('photo.find')}</button>` : ''}<button id="webPhoto">${ic('search')} ${t('photo.search')}</button><small class="err" id="fpErr" hidden></small></div>` : ''}
     <h1 class="rtitle">${esc(r.title)}</h1>
     ${forMeal ? `<p class="mealbanner">${ic('cal')} <span>${esc(t('recipe.forMeal', { date: mealDate, slot: t('slot.' + forMeal.slot) }))}${forMeal.servings ? ' · ' + esc(t('recipe.mealServings', { n: forMeal.servings })) : ''}</span></p>` : ''}
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
@@ -258,6 +258,10 @@ async function recipe(id, opts = {}) {
   $('#del')?.addEventListener('click', async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } });
   $('#toPlan').onclick = () => S.mealSheet({ recipe: r, date: S.ymd(new Date()) }, () => { $('#toPlan').textContent = t('share.save') + ' ✓'; });
   $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));
+  $('#webPhoto')?.addEventListener('click', () => S.photoPicker(r.title, async (p) => {
+    try { await S.post(`/api/recipes/${id}/image-from-url`, { url: p.url, credit: p.credit }); recipe(id, opts); }
+    catch (x) { $('#fpErr').textContent = x.message; $('#fpErr').hidden = false; }
+  }));
   $('#findPhoto')?.addEventListener('click', async (e) => {
     const b = e.target; b.disabled = true; b.textContent = t('photo.finding'); $('#fpErr').hidden = true;
     try { await S.post(`/api/recipes/${id}/find-photo`); recipe(id, opts); }

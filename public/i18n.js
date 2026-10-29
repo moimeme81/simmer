@@ -68,6 +68,8 @@
   // Accounts, sharing, aisles, stores, meal plan.
   const MORE = {
     en: {
+      'photo.search': 'Search the web', 'photo.go': 'Search', 'photo.searchHelp': 'Searches openly licensed photos on Openverse and Wikimedia Commons.', 'photo.pick': 'Pick a photo', 'photo.noResults': 'No photos found. Try other words, such as the dish name in English.',
+      'photo.link': 'Image link', 'photo.useLink': 'Use this link', 'photo.credit': 'Photo:',
       'recipe.edit': 'Edit', 'home.new': 'Write a recipe', 'edit.title': 'Edit recipe', 'edit.newTitle': 'New recipe', 'edit.titleField': 'Title', 'edit.photo': 'Photo', 'edit.choose': 'Choose a photo', 'edit.remove': 'Remove photo',
       'edit.description': 'Description', 'edit.servings': 'Servings', 'edit.servingsPh': '4 servings', 'edit.source': 'Source link', 'edit.ingredientsHelp': 'One ingredient per line, for example “2 cups (500 ml) milk”. Both measurements scale together.',
       'edit.stepsHelp': 'One step per line. Times such as “10 minutes” become tap-to-start timers.',
@@ -137,6 +139,8 @@
       'aisle.personal': 'Personal care', 'aisle.pets': 'Pets', 'aisle.other': 'Other',
     },
     fr: {
+      'photo.search': 'Chercher sur le web', 'photo.go': 'Chercher', 'photo.searchHelp': 'Cherche parmi les photos sous licence libre d’Openverse et de Wikimedia Commons.', 'photo.pick': 'Choisissez une photo', 'photo.noResults': 'Aucune photo trouvée. Essayez d’autres mots, par exemple le nom du plat en anglais.',
+      'photo.link': 'Lien de l’image', 'photo.useLink': 'Utiliser ce lien', 'photo.credit': 'Photo :',
       'recipe.edit': 'Modifier', 'home.new': 'Écrire une recette', 'edit.title': 'Modifier la recette', 'edit.newTitle': 'Nouvelle recette', 'edit.titleField': 'Titre', 'edit.photo': 'Photo', 'edit.choose': 'Choisir une photo', 'edit.remove': 'Retirer la photo',
       'edit.description': 'Description', 'edit.servings': 'Portions', 'edit.servingsPh': '4 portions', 'edit.source': 'Lien source', 'edit.ingredientsHelp': 'Un ingrédient par ligne, par exemple « 2 tasses (500 ml) de lait ». Les deux mesures sont ajustées ensemble.',
       'edit.stepsHelp': 'Une étape par ligne. Les durées comme « 10 minutes » deviennent des minuteries à démarrer d’un toucher.',
@@ -242,6 +246,9 @@
     [/page has no picture/i, { en: null, fr: 'Cette page n’a pas d’image.' }],
     [/picture could not be downloaded/i, { en: null, fr: 'L’image n’a pas pu être téléchargée.' }],
     [/picture is not a JPEG/i, { en: null, fr: 'L’image n’est pas un JPEG, PNG ou WebP.' }],
+    [/could not reach the image search/i, { en: null, fr: 'Simmer ne peut pas joindre la recherche d’images. Vérifiez la connexion Internet du serveur.' }],
+    [/Too many searches/i, { en: null, fr: 'Trop de recherches. Attendez un instant.' }],
+    [/did not give a JPEG/i, { en: null, fr: 'Ce lien n’a pas donné une image JPEG, PNG ou WebP.' }],
     [/Not found/i, { en: null, fr: 'Introuvable.' }],
   ];
 

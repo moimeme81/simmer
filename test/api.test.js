@@ -329,3 +329,29 @@ test('recipes can be created by hand, edited, and their picture replaced', async
   assert.deepEqual([g.title, g.notes], ['Tarte', 'ok']);
   assert.equal((await sis.put(`/api/recipes/${made.id}/image`, { image: PNG })).status, 403);
 });
+
+test('web photo search: results from an Openverse-style server, and picking one downloads it', async () => {
+  const http = require('node:http');
+  let port;
+  const fake = http.createServer((req, res) => {
+    if (req.url.startsWith('/search')) { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ results: [{ thumbnail: `http://127.0.0.1:${port}/pic.jpg`, url: `http://127.0.0.1:${port}/pic.jpg`, title: 'Soup', creator: 'Ann', license: 'by', license_version: '2.0', foreign_landing_url: 'http://x/y' }] })); }
+    if (req.url === '/pic.jpg') { res.setHeader('content-type', 'image/jpeg'); return res.end(JPG); }
+    res.statusCode = 404; res.end();
+  });
+  await new Promise((r) => fake.listen(0, r)); port = fake.address().port;
+  process.env.IMAGE_SEARCH_URL = `http://127.0.0.1:${port}/search`;
+  try {
+    const rid = (await chris.post('/api/recipes', { title: 'Soupe', ingredients: ['a'], steps: ['b'] })).json.id;
+    const found = (await chris.get('/api/image-search?q=soup')).json.results;
+    assert.equal(found.length, 1); assert.match(found[0].credit, /Ann · CC BY 2\.0/);
+    await new Promise((r) => setTimeout(r, 450));
+    const done = await chris.post(`/api/recipes/${rid}/image-from-url`, { url: found[0].url, credit: found[0].credit });
+    assert.equal(done.status, 200); assert.match(done.json.image, /^\/images\//); assert.match(done.json.imageCredit, /Ann/);
+    assert.equal((await chris.post(`/api/recipes/${rid}/image-from-url`, { url: 'file:///etc/passwd' })).status, 400);
+    assert.equal((await chris.post(`/api/recipes/${rid}/image-from-url`, { url: `http://127.0.0.1:${port}/nope` })).status, 422);
+    assert.equal((await sis.post(`/api/recipes/${rid}/image-from-url`, { url: found[0].url })).status, 404, 'not visible to others');
+    assert.equal((await fetch(base + '/api/image-search?q=x')).status, 401);
+    // Replacing the picture by upload drops the old credit.
+    assert.equal((await chris.put(`/api/recipes/${rid}/image`, { image: PNG })).json.imageCredit, undefined);
+  } finally { delete process.env.IMAGE_SEARCH_URL; fake.close(); }
+});

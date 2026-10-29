@@ -6,9 +6,10 @@ const Scale = require('../public/scale');
 const { extractRecipe } = require('./extract');
 const { Store, ListStore, MealStore, TEMPLATES } = require('./store');
 const { Accounts, fail } = require('./accounts');
-const { AnyListImport } = require('./anylist');
+const { AnyListImport, downloadPhoto } = require('./anylist');
 const { AISLES } = require('./ingredients');
 const { PhotoFinder } = require('./photos');
+const { searchImages } = require('./imagesearch');
 
 const cfg = {
   port: +process.env.PORT || 3000,
@@ -197,13 +198,35 @@ app.put('/api/recipes/:id', wrap((req, res) => {
   const patch = r.owner === me(req) ? cleanRecipeFields(req.body) : { notes: str(req.body?.notes, 10000) }; // guests can only add notes
   res.json(recipeView(req, store.update(r.id, patch)));
 }));
+/* Search the web for a picture, then let the owner pick one: the server downloads it, so nothing is hot-linked. */
+let lastSearch = 0;
+app.get('/api/image-search', wrap(async (req, res) => {
+  if (Date.now() - lastSearch < 400) throw fail(429, 'Too many searches. Wait a moment and try again.');
+  lastSearch = Date.now();
+  const { results, errors } = await searchImages(str(req.query.q, 120));
+  if (!results.length && errors.length) throw fail(502, 'Simmer could not reach the image search. Check the server’s internet connection.');
+  res.json({ results });
+}));
+app.post('/api/recipes/:id/image-from-url', wrap(async (req, res) => {
+  const r = recipeFor(req);
+  if (r.owner !== me(req)) throw fail(403, 'Only the owner can change the picture');
+  const url = str(req.body?.url, 2000).trim();
+  if (!/^https?:\/\//i.test(url)) throw fail(400, 'Invalid URL');
+  let buf;
+  try { buf = await downloadPhoto(url, cfg.allowPrivate); } catch (e) { throw fail(422, e.message); }
+  const img = buf ? store.saveImage(r.id, buf) : null;
+  if (!img) throw fail(422, 'That link did not give a JPEG, PNG or WebP picture');
+  const { imageCheck, ...cur } = store.get(r.id);
+  store.write({ ...cur, image: img, ...(req.body?.credit ? { imageCredit: str(req.body.credit, 200) } : {}) });
+  res.json(recipeView(req, store.get(r.id)));
+}));
 app.put('/api/recipes/:id/image', wrap((req, res) => {
   const r = recipeFor(req);
   if (r.owner !== me(req)) throw fail(403, 'Only the owner can change the picture');
   const buf = Buffer.from(str(req.body?.image, 5_000_000), 'base64');
   const img = buf.length > 12 && buf.length <= 3_500_000 ? store.saveImage(r.id, buf) : null;
   if (!img) throw fail(400, 'Use a JPEG, PNG or WebP picture under 3 MB');
-  const { imageCheck, ...cur } = store.get(r.id);
+  const { imageCheck, imageCredit, ...cur } = store.get(r.id);
   store.write({ ...cur, image: img });
   res.json(recipeView(req, store.get(r.id)));
 }));
@@ -211,7 +234,8 @@ app.delete('/api/recipes/:id/image', wrap((req, res) => {
   const r = recipeFor(req);
   if (r.owner !== me(req)) throw fail(403, 'Only the owner can change the picture');
   store.removeImage(r.id);
-  store.write({ ...store.get(r.id), image: null });
+  const { imageCredit, ...cur } = store.get(r.id);
+  store.write({ ...cur, image: null });
   res.json(recipeView(req, store.get(r.id)));
 }));
 app.put('/api/recipes/:id/share', wrap((req, res) => {
