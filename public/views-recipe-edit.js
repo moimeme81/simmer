@@ -24,19 +24,31 @@
       <form id="pf2" class="row" role="search"><input id="pq" type="search" value="${esc(query || '')}" aria-label="${esc(t('photo.search'))}" autocomplete="off"><button class="primary">${t('photo.go')}</button></form>
       <p class="muted" id="pstat" style="margin:8px 0">${t('photo.searchHelp')}</p>
       <div class="pgrid" id="pgrid"></div>
+      <div id="pprev" hidden></div>
       <form id="pl" class="row" style="margin-top:12px"><input id="pu" type="url" placeholder="https://…" aria-label="${esc(t('photo.link'))}"><button>${t('photo.useLink')}</button></form>
       <div class="row end" style="margin-top:12px"><button type="button" class="quiet" data-x>${t('share.cancel')}</button></div>`, (el, close) => {
       $('[data-x]', el).onclick = close;
       const stat = $('#pstat', el);
+      let seq = 0;   // only the newest search may fill the grid
+      const showPreview = (r) => {
+        const prev = $('#pprev', el);
+        $('#pgrid', el).hidden = true; prev.hidden = false;
+        prev.innerHTML = `<div class="ppick"><img alt="" referrerpolicy="no-referrer"></div><p class="muted" style="margin:6px 0">${esc(r.title)}${r.credit ? ' · ' + esc(r.credit) : ''}</p><div class="row end"><button type="button" class="quiet" id="pback">${t('photo.back')}</button><button type="button" class="primary" id="puse">${t('photo.use')}</button></div>`;
+        const im = $('img', prev); im.onerror = () => { if (r.thumb && im.src !== r.thumb) im.src = r.thumb; }; im.src = r.thumb;
+        $('#pback', prev).onclick = () => { prev.hidden = true; $('#pgrid', el).hidden = false; };
+        $('#puse', prev).onclick = () => { close(); onPick({ url: r.url, alt: r.alt, thumb: r.thumb, credit: [r.credit, r.source].filter(Boolean).join(' · ') }); };
+      };
       const run = async () => {
         const q = $('#pq', el).value.trim(); if (!q) return;
-        stat.textContent = t('photo.finding'); $('#pgrid', el).innerHTML = '';
+        const mine = ++seq;
+        stat.textContent = t('photo.finding'); stat.className = 'muted'; $('#pgrid', el).innerHTML = ''; $('#pgrid', el).hidden = false; $('#pprev', el).hidden = true;
         try {
           const { results } = await api('/api/image-search?q=' + encodeURIComponent(q));
+          if (mine !== seq) return;
           stat.textContent = results.length ? t('photo.pick') : t('photo.noResults');
           $('#pgrid', el).innerHTML = results.map((r, n) => `<button type="button" class="pcell" data-n="${n}" title="${esc(r.title)}"><img src="${esc(r.thumb)}" alt="${esc(r.title)}" loading="lazy" referrerpolicy="no-referrer"><small>${esc(r.source)}</small></button>`).join('');
-          el.querySelectorAll('.pcell').forEach((b) => (b.onclick = () => { const r = results[+b.dataset.n]; close(); onPick({ url: r.url, alt: r.alt, thumb: r.thumb, credit: [r.credit, r.source].filter(Boolean).join(' · ') }); }));
-        } catch (x) { stat.textContent = x.message; stat.className = 'err'; }
+          el.querySelectorAll('.pcell').forEach((b) => (b.onclick = () => showPreview(results[+b.dataset.n])));
+        } catch (x) { if (mine !== seq) return; stat.textContent = x.message; stat.className = 'err'; }
       };
       $('#pf2', el).onsubmit = (e) => { e.preventDefault(); run(); };
       $('#pl', el).onsubmit = (e) => { e.preventDefault(); const u = $('#pu', el).value.trim(); if (u) { close(); onPick({ url: u, thumb: u, credit: '' }); } };
