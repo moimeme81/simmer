@@ -20,9 +20,13 @@ const fake = {
 test('web AnyList import: success, idempotent, bad login', async () => {
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
-  const post = (p, body) => fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  const waitDone = async () => { for (let i = 0; i < 50; i++) { const s = await (await fetch(base + '/api/import/anylist/status')).json(); if (s.state !== 'running') return s; await new Promise((r) => setTimeout(r, 50)); } throw new Error('timeout'); };
+  let cookie = '';
+  const post = async (p, body) => { const r = await fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body) }); const c = r.headers.get('set-cookie'); if (c) cookie = c.split(';')[0]; return r; };
+  const get = (p) => fetch(base + p, { headers: { cookie } });
+  const waitDone = async () => { for (let i = 0; i < 50; i++) { const s = await (await get('/api/import/anylist/status')).json(); if (s.state !== 'running') return s; await new Promise((r) => setTimeout(r, 50)); } throw new Error('timeout'); };
   try {
+    assert.equal((await post('/api/import/anylist', { email: 'a@b.c', password: 'pw' })).status, 401, 'login required');
+    assert.equal((await post('/api/auth/setup', { name: 'T', username: 'tester', password: 'password123' })).status, 200);
     assert.equal((await post('/api/import/anylist', { email: '' })).status, 400);
 
     anylist.setClientFactory(() => fake);
@@ -32,7 +36,7 @@ test('web AnyList import: success, idempotent, bad login', async () => {
     assert.equal(s.done, 1); assert.equal(s.skipped, 1); assert.equal(s.lists, 1);
 
     await post('/api/import/anylist', { email: 'a@b.c', password: 'pw' }); await waitDone();   // run again
-    const recipes = await (await fetch(base + '/api/recipes')).json();
+    const recipes = await (await get('/api/recipes')).json();
     assert.equal(recipes.length, 1);
     assert.equal(recipes[0].cookMinutes, 30);
     assert.deepEqual(recipes[0].ingredients, ['2 carottes', '1 L eau (froide)']);

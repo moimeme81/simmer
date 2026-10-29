@@ -30,7 +30,7 @@ test('list store: add, check, clear, idempotent import', () => {
   const { ListStore } = require('../src/store');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'simmer-'));
   const ls = new ListStore(dir);
-  const id = ls.all()[0].id;
+  const id = ls.createList('u1', 'Groceries').id;
   ls.addItems(id, [{ name: 'milk' }, { name: ' ' }, { name: 'eggs' }]);
   assert.equal(ls.all()[0].items.length, 2);
   ls.updateItem(id, ls.all()[0].items[0].id, { checked: true });
