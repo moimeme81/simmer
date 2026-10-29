@@ -60,10 +60,18 @@ async function duckduckgo(q) {
   }).filter((r) => r.url && r.thumb);
 }
 
-/** Google Programmable Search, only when GOOGLE_CSE_KEY and GOOGLE_CSE_CX are set (free: 100 searches a day). */
-async function google(q) {
-  const j = JSON.parse(await fetchText('https://www.googleapis.com/customsearch/v1?' + new URLSearchParams({ key: process.env.GOOGLE_CSE_KEY, cx: process.env.GOOGLE_CSE_CX, q, searchType: 'image', num: '10', safe: 'active' }), UA));
-  return (j.items || []).map((r) => ({ thumb: httpUrl(r.image?.thumbnailLink), url: httpUrl(r.link), alt: httpUrl(r.image?.thumbnailLink), title: String(r.title || '').slice(0, 120), credit: String(r.displayLink || ''), page: httpUrl(r.image?.contextLink), source: 'Google' })).filter((r) => r.url && r.thumb);
+/** Web-wide image results from Bing (no key), used alongside DuckDuckGo so one being rate-limited doesn't end the search. Unofficial. */
+async function bing(q) {
+  const html = await fetchText('https://www.bing.com/images/async?' + new URLSearchParams({ q, first: '0', count: '30', mmasync: '1', adlt: 'moderate' }), BROWSER);
+  const out = [];
+  for (const m of html.matchAll(/\sm="([^"]+)"/g)) {
+    let j; try { j = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')); } catch { continue; }
+    let host = ''; try { host = new URL(j.purl).hostname.replace(/^www\./, ''); } catch {}
+    const r = { thumb: httpUrl(j.turl), url: httpUrl(j.murl), alt: httpUrl(j.turl), title: String(j.t || '').replace(/<[^>]*>/g, '').slice(0, 120), credit: host, page: httpUrl(j.purl), source: 'Web' };
+    if (r.url && r.thumb) out.push(r);
+  }
+  if (!out.length && !/iusc|imgpt/.test(html)) throw new Error('unreadable reply');
+  return out.slice(0, 24);
 }
 
 /** Wordings to try, most specific first: "Pork Osso Buco" -> "Osso Buco" -> "Buco". */
@@ -86,17 +94,26 @@ async function trySource(fn, q) {
   return [];
 }
 
+const cache = new Map();   // query -> { at, value }: repeat searches don't hit the sites again (they rate-limit)
+
 /** Returns { results, errors, reached }. `reached` = how many sources answered (even with zero photos). */
 async function searchImages(q) {
   const query = String(q || '').trim().slice(0, 120);
   if (!query) return { results: [], errors: [], reached: 0 };
-  const googleOn = process.env.GOOGLE_CSE_KEY && process.env.GOOGLE_CSE_CX;
-  const jobs = process.env.IMAGE_SEARCH_URL ? [openverse] : [...(googleOn ? [google] : []), duckduckgo, openverse, commons];
+  const key = query.toLowerCase(), hit = cache.get(key);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit.value;
+  const value = await run(query);
+  if (value.results.length) { cache.set(key, { at: Date.now(), value }); if (cache.size > 100) cache.delete(cache.keys().next().value); }
+  return value;
+}
+
+async function run(query) {
+  const jobs = process.env.IMAGE_SEARCH_URL ? [openverse] : [duckduckgo, bing, openverse, commons];
   const settled = await Promise.allSettled(jobs.map((f) => trySource(f, query)));
   const results = [], seen = new Set();
   const max = Math.max(...settled.map((s) => (s.status === 'fulfilled' ? s.value.length : 0)), 0);
   for (let n = 0; n < max; n++) for (const s of settled) { const r = s.status === 'fulfilled' && s.value[n]; if (r && !seen.has(r.url)) { seen.add(r.url); results.push(r); } }
-  const names = process.env.IMAGE_SEARCH_URL ? ['Custom'] : [...(googleOn ? ['Google'] : []), 'Web', 'Openverse', 'Wikimedia Commons'];
+  const names = process.env.IMAGE_SEARCH_URL ? ['Custom'] : ['DuckDuckGo', 'Bing', 'Openverse', 'Wikimedia Commons'];
   console.log('[image-search]', JSON.stringify(query), settled.map((x, n) => `${names[n]}=${x.status === 'fulfilled' ? x.value.length : 'failed'}`).join(' '));
   return { results, reached: settled.filter((s) => s.status === 'fulfilled').length, errors: settled.map((s, n) => (s.status === 'rejected' ? `${names[n]}: ${String(s.reason?.message || s.reason)}` : null)).filter(Boolean) };
 }

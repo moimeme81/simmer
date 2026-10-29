@@ -68,7 +68,7 @@
   // Accounts, sharing, aisles, stores, meal plan.
   const MORE = {
     en: {
-      'photo.search': 'Search the web', 'photo.go': 'Search', 'photo.searchHelp': 'Searches the web for pictures (DuckDuckGo, Openverse, Wikimedia Commons). Check that you may use the picture.', 'photo.pick': 'Pick a photo', 'photo.noResults': 'No photos found. Try other words, such as the dish name in English.',
+      'photo.search': 'Search the web', 'photo.go': 'Search', 'photo.searchHelp': 'Searches the web for pictures (DuckDuckGo, Bing, Openverse, Wikimedia Commons). Check that you may use the picture.', 'photo.pick': 'Pick a photo', 'photo.noResults': 'No photos found. Try other words, such as the dish name in English.',
       'photo.link': 'Image link', 'photo.useLink': 'Use this link', 'photo.credit': 'Photo:', 'photo.change': 'Change photo',
       'recipe.edit': 'Edit', 'home.new': 'Write a recipe', 'edit.title': 'Edit recipe', 'edit.newTitle': 'New recipe', 'edit.titleField': 'Title', 'edit.photo': 'Photo', 'edit.choose': 'Choose a photo', 'edit.remove': 'Remove photo',
       'edit.description': 'Description', 'edit.servings': 'Servings', 'edit.servingsPh': '4 servings', 'edit.source': 'Source link', 'edit.ingredientsHelp': 'One ingredient per line, for example “2 cups (500 ml) milk”. Both measurements scale together.',
@@ -139,7 +139,7 @@
       'aisle.personal': 'Personal care', 'aisle.pets': 'Pets', 'aisle.other': 'Other',
     },
     fr: {
-      'photo.search': 'Chercher sur le web', 'photo.go': 'Chercher', 'photo.searchHelp': 'Cherche des images sur le web (DuckDuckGo, Openverse, Wikimedia Commons). Vérifiez que vous avez le droit de l’utiliser.', 'photo.pick': 'Choisissez une photo', 'photo.noResults': 'Aucune photo trouvée. Essayez d’autres mots, par exemple le nom du plat en anglais.',
+      'photo.search': 'Chercher sur le web', 'photo.go': 'Chercher', 'photo.searchHelp': 'Cherche des images sur le web (DuckDuckGo, Bing, Openverse, Wikimedia Commons). Vérifiez que vous avez le droit de l’utiliser.', 'photo.pick': 'Choisissez une photo', 'photo.noResults': 'Aucune photo trouvée. Essayez d’autres mots, par exemple le nom du plat en anglais.',
       'photo.link': 'Lien de l’image', 'photo.useLink': 'Utiliser ce lien', 'photo.credit': 'Photo :', 'photo.change': 'Changer la photo',
       'recipe.edit': 'Modifier', 'home.new': 'Écrire une recette', 'edit.title': 'Modifier la recette', 'edit.newTitle': 'Nouvelle recette', 'edit.titleField': 'Titre', 'edit.photo': 'Photo', 'edit.choose': 'Choisir une photo', 'edit.remove': 'Retirer la photo',
       'edit.description': 'Description', 'edit.servings': 'Portions', 'edit.servingsPh': '4 portions', 'edit.source': 'Lien source', 'edit.ingredientsHelp': 'Un ingrédient par ligne, par exemple « 2 tasses (500 ml) de lait ». Les deux mesures sont ajustées ensemble.',
