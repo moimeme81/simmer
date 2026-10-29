@@ -110,6 +110,8 @@ app.post('/api/auth/login', wrap((req, res) => {
   res.json({ ok: true });
 }));
 app.post('/api/auth/logout', (req, res) => { const c = cookieOf(req, COOKIE); if (c) acc.endSession(c); clearCookie(res); res.json({ ok: true }); });
+app.get('/api/auth/reset/:code', (req, res) => { const r = acc.checkReset(req.params.code); res.json({ valid: !!r, name: r?.user?.name || '' }); });
+app.post('/api/auth/reset', wrap((req, res) => { acc.useReset(str(req.body?.code, 200), str(req.body?.password, 500)); res.json({ ok: true }); }));
 app.get('/api/auth/invite/:code', (req, res) => res.json({ valid: !!acc.checkInvite(req.params.code) }));
 app.post('/api/auth/register', wrap((req, res) => {
   const u = acc.register(str(req.body?.invite, 200), req.body || {});
@@ -193,6 +195,11 @@ app.delete('/api/admin/users/:id', admin, wrap((req, res) => {
   res.json({ ok: true });
 }));
 app.post('/api/admin/users/:id/reset-2fa', admin, wrap((req, res) => { if (!acc.adminResetTwoFactor(req.params.id)) throw notFound(); res.json({ ok: true }); }));
+app.post('/api/admin/users/:id/reset-link', admin, wrap((req, res) => {
+  const code = acc.createResetLink(req.params.id);
+  if (!code) throw notFound();
+  res.json({ code });
+}));
 app.post('/api/admin/users/:id/reset-password', admin, wrap((req, res) => {
   const temp = acc.resetPassword(req.params.id);
   if (!temp) throw notFound();
@@ -741,7 +748,22 @@ app.get(['/', '/index.html'], sendIndex);
 app.use(express.static(PUBLIC, { setHeaders: (res, file) => { if (/\.(js|css|html)$/.test(file)) res.set('Cache-Control', 'no-cache'); if (/sw\.js$/.test(file)) res.set('Service-Worker-Allowed', '/'); } }));
 app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message, ...(err.code ? { code: err.code } : {}) }));
 
+/**
+ * A locked-out admin can run `node src/cli.js reset-password <username>` in the container. Because the server keeps the accounts in memory,
+ * the command leaves a request file here and this picks it up (so nobody has to stop the server), then writes the new temporary password back.
+ */
+const RESET_REQ = path.join(cfg.dataDir, 'reset-request.json'), RESET_OUT = path.join(cfg.dataDir, 'reset-result.json');
+function handleResetRequest() {
+  let req;
+  try { req = JSON.parse(fs.readFileSync(RESET_REQ, 'utf8')); } catch { return; }
+  fs.rmSync(RESET_REQ, { force: true });
+  const u = acc.db.users.find((x) => x.username === String(req.username || '').trim().toLowerCase());
+  const out = u ? { ok: true, username: u.username, password: acc.resetPassword(u.id), name: u.name } : { ok: false, error: `No account called “${req.username}”.` };
+  fs.writeFileSync(RESET_OUT, JSON.stringify({ ...out, id: req.id }), { mode: 0o600 });
+}
+
 if (require.main === module) {
+  setInterval(handleResetRequest, 2000).unref();
   if (process.env.PHOTO_CHECK !== 'false') photos.start();
   fed.start();
   app.listen(cfg.port, '0.0.0.0', () =>
@@ -749,5 +771,6 @@ if (require.main === module) {
   );
 }
 module.exports = app;
+module.exports.handleResetRequest = handleResetRequest;
 module.exports.cfg = cfg;
 module.exports.photos = photos;

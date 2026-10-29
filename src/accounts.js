@@ -253,6 +253,30 @@ class Accounts {
     return u;
   }
 
+  /* ---------- password reset links (an admin makes one; the person opens it and chooses a new password) ---------- */
+  createResetLink(userId) {
+    const u = this.user(userId);
+    if (!u) return null;
+    const code = secret('rst_');
+    const now = Date.now();
+    this.db.resets = (this.db.resets || []).filter((r) => r.expires > now && r.userId !== userId);
+    this.db.resets.push({ hash: sha(code), userId, expires: now + 24 * 3600 * 1000 });
+    this.save();
+    return code;
+  }
+  checkReset(code) { const r = (this.db.resets || []).find((x) => x.hash === sha(String(code || '')) && x.expires > Date.now()); return r ? { ...r, user: this.user(r.userId) } : null; }
+  useReset(code, password) {
+    const r = this.checkReset(code);
+    if (!r?.user) throw fail(400, 'This reset link is invalid or has expired');
+    if (String(password || '').length < 8) throw fail(400, 'Password must be at least 8 characters');
+    Object.assign(r.user, hashPassword(String(password)));
+    this.db.sessions = this.db.sessions.filter((s) => s.userId !== r.userId);   // sign out everywhere
+    this.db.resets = this.db.resets.filter((x) => x.userId !== r.userId);
+    this.fails.clear();
+    this.save();
+    return r.user;
+  }
+
   /* ---------- households ---------- */
   household(id) { return this.db.households.find((h) => h.id === id) || null; }
   householdsOf(userId) { return this.db.households.filter((h) => h.members.includes(userId)); }

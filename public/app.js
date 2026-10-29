@@ -487,6 +487,8 @@ function route() {
   const h = location.hash;
   const join = h.match(/^#\/join\/([\w-]+)/);
   if (join && !S.me) { S.authScreen('join', join[1]); return; }
+  const rst = h.match(/^#\/reset\/([\w-]+)/);
+  if (rst && !S.me) { S.authScreen('reset', rst[1]); return; }
   chrome(); notice(); dockSig = ''; renderDock(); renderCookBar();
   const m = h.match(/^#\/r\/([\w-]+)(\/cook)?(?:\?meal=([\w-]+))?/);
   const view = h.startsWith('#/lists') ? () => S.views.lists((h.match(/^#\/lists\/([\w-]+)/) || [])[1]) : h.startsWith('#/plan') ? () => S.views.plan() : h.startsWith('#/account') ? () => S.views.account()
@@ -500,7 +502,7 @@ S.onSignedOut = () => { if (S.me) { S.me = null; S.boot(); } };
 S.boot = async () => {
   const st = await api('/api/auth/state');
   if (st.setup) { S.me = null; document.body.classList.add('auth'); return S.authScreen('setup'); }
-  if (!st.user) { S.me = null; document.body.classList.add('auth'); const j = location.hash.match(/^#\/join\/([\w-]+)/); return S.authScreen(j ? 'join' : 'login', j && j[1]); }
+  if (!st.user) { S.me = null; document.body.classList.add('auth'); const j = location.hash.match(/^#\/join\/([\w-]+)/), rs = location.hash.match(/^#\/reset\/([\w-]+)/); return S.authScreen(rs ? 'reset' : j ? 'join' : 'login', (rs || j) && (rs || j)[1]); }
   document.body.classList.remove('auth');
   await S.refreshMe();
   if (st.user.lang && !localStorage.getItem('simmer-lang')) I18n.set(st.user.lang);

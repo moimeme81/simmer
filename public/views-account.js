@@ -4,18 +4,21 @@
   const { $, t, esc, api, ic } = S;
   const flash = (el, msg, bad) => { el.textContent = msg; el.className = bad ? 'err' : 'ok'; el.hidden = false; };
 
-  /** kind: 'setup' | 'login' | 'join' */
+  /** kind: 'setup' | 'login' | 'join' | 'reset' */
   S.authScreen = async (kind, code) => {
     document.body.classList.add('auth');
-    let invalid = false;
+    let invalid = false, who = '';
     if (kind === 'join') invalid = !(await api('/api/auth/invite/' + encodeURIComponent(code))).valid;
+    if (kind === 'reset') { const r = await api('/api/auth/reset/' + encodeURIComponent(code)); invalid = !r.valid; who = r.name; }
     const joining = kind === 'join' || kind === 'setup';
     S.app.innerHTML = `
       <div class="authcard">
         <img src="icon-192.png" alt="" width="72" height="72">
-        <h1>${t(kind === 'setup' ? 'auth.setupTitle' : kind === 'join' ? 'auth.joinTitle' : 'auth.loginTitle')}</h1>
-        <p class="muted">${t(kind === 'setup' ? 'auth.setupBlurb' : kind === 'join' ? 'auth.joinBlurb' : '')}</p>
-        ${invalid ? `<p class="err">${t('auth.badInvite')}</p>` : `
+        <h1>${t(kind === 'setup' ? 'auth.setupTitle' : kind === 'join' ? 'auth.joinTitle' : kind === 'reset' ? 'auth.resetTitle' : 'auth.loginTitle')}</h1>
+        <p class="muted">${kind === 'reset' && !invalid ? esc(t('auth.resetBlurb', { name: who })) : t(kind === 'setup' ? 'auth.setupBlurb' : kind === 'join' ? 'auth.joinBlurb' : '')}</p>
+        ${invalid ? `<p class="err">${t(kind === 'reset' ? 'auth.badReset' : 'auth.badInvite')}</p>` : kind === 'reset' ? `
+        <form class="panel stack" id="af"><label for="ap">${t('acct.new')}</label><input id="ap" name="password" type="password" autocomplete="new-password" minlength="8" required><small class="muted">${t('auth.hint')}</small>
+          <p class="err" id="aerr" hidden></p><button class="primary wide">${t('auth.resetGo')}</button></form>` : `
         <form class="panel stack" id="af">
           ${joining ? `<label for="an">${t('auth.name')}</label><input id="an" name="name" autocomplete="name" required>` : ''}
           <label for="au">${t('auth.username')}</label><input id="au" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
@@ -25,6 +28,7 @@
           <p class="err" id="aerr" hidden></p>
           <button class="primary wide">${t(joining ? 'auth.create' : 'auth.login')}</button>
         </form>`}
+        ${kind === 'login' ? `<details class="forgot"><summary>${t('auth.forgot')}</summary><p class="muted">${t('auth.forgotHelp')}</p></details>` : ''}
         <button class="quiet" id="alang">${t('lang.other')}</button>
       </div>`;
     $('#alang').onclick = () => { I18n.set(I18n.lang === 'fr' ? 'en' : 'fr'); S.authScreen(kind, code); };
@@ -34,6 +38,7 @@
       e.preventDefault();
       const b = Object.fromEntries(new FormData(form));
       try {
+        if (kind === 'reset') { await S.post('/api/auth/reset', { code, password: b.password }); history.replaceState(null, '', '#/'); return S.authScreen('login'); }
         if (kind === 'setup') await S.post('/api/auth/setup', b);
         else if (kind === 'join') await S.post('/api/auth/register', { ...b, invite: code });
         else if (S.embedded) S.setEmbedToken(await S.post('/api/auth/login', { ...b, asToken: true }));
@@ -56,7 +61,7 @@
     await S.refreshMe();
     const me = S.me;
     const [tokens, users] = await Promise.all([api('/api/tokens'), me.admin ? api('/api/admin/users') : []]);
-    let newToken = '', inviteLink = '', resetMsg = '';
+    let newToken = '', inviteLink = '', resetLink = null;
 
     const draw = () => {
       S.app.innerHTML = `
@@ -122,7 +127,7 @@
               <div class="row"><button class="primary">${t('acct.makeInvite')}</button></div></form>
             ${inviteLink ? `<div class="reveal"><code id="il">${esc(inviteLink)}</code><div class="row"><button id="ilc">${t('acct.copy')}</button></div></div>` : ''}
             <h2 class="sec" style="margin-top:22px">${t('acct.users')}</h2>
-            ${resetMsg ? `<p class="ok">${esc(resetMsg)}</p>` : ''}
+            ${resetLink ? `<div class="reveal"><p><b>${esc(t('acct.resetLinkFor', { name: resetLink.name }))}</b></p><p class="muted">${t('acct.resetLinkHelp')}</p><code id="rl">${esc(resetLink.url)}</code><div class="row"><button id="rlc" type="button">${t('acct.copy')}</button></div></div>` : ''}
             <ul class="plain">${users.map((u) => `<li class="row between"><span>${esc(u.name)} <span class="muted">@${esc(u.username)}${u.admin ? ` · ${t('acct.admin')}` : ''}</span></span>
               ${u.id === me.id ? '' : `<span class="row">${u.twoFactor ? `<button class="quiet" data-r2="${u.id}" data-n="${esc(u.name)}">${t('tf.adminReset')}</button>` : ''}<button class="quiet" data-reset="${u.id}" data-n="${esc(u.name)}">${t('acct.reset')}</button><button class="quiet" data-ru="${u.id}" data-n="${esc(u.name)}">${t('acct.removeUser')}</button></span>`}</li>`).join('')}</ul>
           </section>` : ''}
@@ -173,8 +178,9 @@
         inviteLink = `${location.origin}/#/join/${code}`; draw();
       });
       $('#ilc')?.addEventListener('click', (e) => copy(inviteLink, e.target));
+      $('#rlc')?.addEventListener('click', (e) => copy(resetLink.url, e.target));
       app.querySelectorAll('[data-r2]').forEach((b) => (b.onclick = async () => { if (!confirm(t('tf.confirmAdminReset', { name: b.dataset.n }))) return; await S.post(`/api/admin/users/${b.dataset.r2}/reset-2fa`); users.splice(0, users.length, ...(await api('/api/admin/users'))); draw(); }));
-      app.querySelectorAll('[data-reset]').forEach((b) => (b.onclick = async () => { const r = await S.post(`/api/admin/users/${b.dataset.reset}/reset-password`); resetMsg = t('acct.resetDone', { name: b.dataset.n, pw: r.password }); draw(); }));
+      app.querySelectorAll('[data-reset]').forEach((b) => (b.onclick = async () => { const r = await S.post(`/api/admin/users/${b.dataset.reset}/reset-link`); resetLink = { name: b.dataset.n, url: `${location.origin}/#/reset/${r.code}` }; draw(); }));
       app.querySelectorAll('[data-ru]').forEach((b) => (b.onclick = async () => {
         if (!confirm(t('acct.confirmRemoveUser', { name: b.dataset.n }))) return;
         await S.del('/api/admin/users/' + b.dataset.ru);
