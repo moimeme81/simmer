@@ -2,6 +2,13 @@
 (() => {
   'use strict';
   const S = (window.S = { views: {}, me: null, people: [], aisles: [] });
+
+  // Installable app: keep the browser's install offer for the Account page, and register the service worker.
+  S.installPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installPrompt = e; });
+  window.addEventListener('appinstalled', () => { S.installPrompt = null; });
+  S.isInstalled = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => { try { navigator.serviceWorker.register('/sw.js').catch(() => {}); } catch { /* not available here */ } });
   const $ = (s, r = document) => r.querySelector(s);
   const t = (k, v) => I18n.t(k, v);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -528,7 +528,7 @@ const ASSET_V = assetVersion();
 const indexHtml = () => fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8').replace(/(src|href)="([\w.-]+\.(?:js|css))"/g, `$1="$2?v=${ASSET_V}"`);
 const sendIndex = (_req, res) => res.set('Cache-Control', 'no-cache').type('html').send(indexHtml());
 app.get(['/', '/index.html'], sendIndex);
-app.use(express.static(PUBLIC, { setHeaders: (res, file) => { if (/\.(js|css|html)$/.test(file)) res.set('Cache-Control', 'no-cache'); } }));
+app.use(express.static(PUBLIC, { setHeaders: (res, file) => { if (/\.(js|css|html)$/.test(file)) res.set('Cache-Control', 'no-cache'); if (/sw\.js$/.test(file)) res.set('Service-Worker-Allowed', '/'); } }));
 app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message }));
 
 if (require.main === module) {

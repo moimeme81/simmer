@@ -365,6 +365,20 @@ test('measurement settings are saved per user, one kind at a time, and bad value
   assert.deepEqual(r.units, { mass: 'orig', vol: 'both', len: 'orig', temp: 'imperial' });
 });
 
+test('the app is installable: manifest, service worker and icons are served without signing in', async () => {
+  const m = await fetch(base + '/manifest.webmanifest');
+  assert.equal(m.status, 200);
+  const j = await m.json();
+  assert.equal(j.display, 'standalone');
+  assert.ok(j.icons.some((i) => i.sizes === '512x512') && j.icons.some((i) => i.purpose === 'maskable'));
+  const sw = await fetch(base + '/sw.js');
+  assert.equal(sw.status, 200);
+  assert.match(sw.headers.get('content-type'), /javascript/);
+  assert.match(sw.headers.get('cache-control') || '', /no-cache/);
+  assert.match(await sw.text(), /\/api/);   // never caches the API
+  for (const f of ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png']) assert.equal((await fetch(base + '/' + f)).status, 200);
+});
+
 test('the page revalidates and script URLs are fingerprinted so caches cannot serve an old version', async () => {
   const page = await fetch(base + '/');
   assert.match(page.headers.get('cache-control'), /no-cache/);
