@@ -189,7 +189,7 @@ async function recipe(id, opts = {}) {
 
   app.innerHTML = `
     <a class="back" href="#/">${t('recipe.back')}</a>
-    ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">${r.imageCredit ? `<small class="muted credit">${t('photo.credit')} ${esc(r.imageCredit)}</small>` : ''}` : r.mine ? `<div class="nophoto">${ic('image')}<span>${t('photo.missingHere')}</span>${/^https?:/.test(r.sourceUrl || '') ? `<button id="findPhoto">${t('photo.find')}</button>` : ''}<button id="webPhoto">${ic('search')} ${t('photo.search')}</button><small class="err" id="fpErr" hidden></small></div>` : ''}
+    ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">${r.imageCredit ? `<small class="muted credit">${t('photo.credit')} ${esc(r.imageCredit)}</small>` : ''}${r.mine ? `<button class="quiet changephoto" id="webPhoto">${ic('search')} ${t('photo.change')}</button>` : ''}` : r.mine ? `<div class="nophoto">${ic('image')}<span>${t('photo.missingHere')}</span>${/^https?:/.test(r.sourceUrl || '') ? `<button id="findPhoto">${t('photo.find')}</button>` : ''}<button id="webPhoto">${ic('search')} ${t('photo.search')}</button><small class="err" id="fpErr" hidden></small></div>` : ''}
     <h1 class="rtitle">${esc(r.title)}</h1>
     ${forMeal ? `<p class="mealbanner">${ic('cal')} <span>${esc(t('recipe.forMeal', { date: mealDate, slot: t('slot.' + forMeal.slot) }))}${forMeal.servings ? ' · ' + esc(t('recipe.mealServings', { n: forMeal.servings })) : ''}</span></p>` : ''}
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
