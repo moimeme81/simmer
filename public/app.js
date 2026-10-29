@@ -63,9 +63,50 @@ function stepHTML(text, n) {
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('.dur'); if (!b) return;
-  Timers.add({ label: t('timer.stepLabel', { n: b.dataset.n, time: b.dataset.t }), seconds: +b.dataset.s });
+  Timers.add({ label: (curTitle ? short(curTitle) + ' · ' : '') + t('timer.stepLabel', { n: b.dataset.n, time: b.dataset.t }), seconds: +b.dataset.s });
   b.classList.add('started'); setTimeout(() => b.classList.remove('started'), 1500);
 });
+
+/* ---------- choosing a list (remembers your last pick) ---------- */
+const lastList = () => { try { return localStorage.getItem('simmer-addlist') || ''; } catch { return ''; } };
+/** Resolves with the chosen list, or null when dismissed. One tap when you have a single list. */
+async function pickList(title) {
+  const ls = await api('/api/lists');
+  if (ls.length === 1) return ls[0];
+  return new Promise((done) => {
+    let chosen = null;
+    const last = lastList();
+    const ordered = [...ls.filter((l) => l.id === last), ...ls.filter((l) => l.id !== last)];
+    const close = S.modal(`<h2 class="sec">${esc(title)}</h2><div class="stack pickl">${ordered.map((l) => `<button class="pickrow" data-l="${l.id}">${S.listBadge(l, 36)}<span>${esc(S.listName(l))}</span></button>`).join('')}</div>
+      <div class="row end" style="margin-top:12px"><button class="quiet" data-x>${t('share.cancel')}</button></div>`, (el, c) => {
+      $('[data-x]', el).onclick = c;
+      el.querySelectorAll('[data-l]').forEach((b) => (b.onclick = () => { chosen = ls.find((l) => l.id === b.dataset.l); try { localStorage.setItem('simmer-addlist', chosen.id); } catch { /* private mode */ } c(); }));
+      new MutationObserver((_, o) => { if (!el.isConnected) { o.disconnect(); done(chosen); } }).observe(document.body, { childList: true });
+    });
+    void close;
+  });
+}
+
+function flashNote(msg) {
+  const n = document.createElement('div'); n.className = 'toast'; n.setAttribute('role', 'status'); n.textContent = msg; document.body.appendChild(n); setTimeout(() => n.remove(), 2200);
+}
+
+/* ---------- recipes being cooked right now (several at once) ---------- */
+const sessions = {
+  read() { try { return JSON.parse(localStorage.getItem('simmer-cooking') || '{}'); } catch { return {}; } },
+  write(o) { try { localStorage.setItem('simmer-cooking', JSON.stringify(o)); } catch { /* private mode */ } renderCookBar(); },
+  set(id, v) { const o = this.read(); o[id] = { ...o[id], ...v }; this.write(o); },
+  end(id) { const o = this.read(); delete o[id]; this.write(o); },
+};
+let curTitle = '';
+const short = (s, n = 26) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+function renderCookBar() {
+  let bar = $('#cookbar');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'cookbar'; $('.topbar').after(bar); bar.addEventListener('click', (e) => { const x = e.target.closest('[data-end]'); if (x) sessions.end(x.dataset.end); }); }
+  const all = Object.entries(sessions.read());
+  bar.hidden = !all.length;
+  bar.innerHTML = all.length ? `<span class="muted">${t('cook.now')}</span>${all.map(([id, v]) => `<span class="cookchip"><a href="#/r/${id}/cook">${ic('timer')} ${esc(short(v.title, 30))} <small>${t('cook.step', { n: v.step + 1, m: v.total })}</small></a><button data-end="${id}" aria-label="${esc(t('cook.end'))}: ${esc(v.title)}">${ic('close')}</button></span>`).join('')}` : '';
+}
 
 /* ---------- home ---------- */
 const TILES = ['#1F4E96', '#2F7D6B', '#7A4B8F', '#B8741A', '#4F6B2E', '#9B3D52'];
@@ -78,6 +119,7 @@ async function home() {
       <div class="err" id="imperr" hidden></div>
       <div class="field"><input type="search" id="q" placeholder="${esc(t('home.search'))}" aria-label="${esc(t('home.search'))}"></div>
     </div>
+    <div class="chips filters" id="cols" role="group" aria-label="${esc(t('col.title'))}"></div>
     <p class="count" id="count"></p><div id="cards"></div>`;
   const form = $('#imp'), err = $('#imperr');
   form.onsubmit = async (e) => {
@@ -87,21 +129,32 @@ async function home() {
     catch (x) { err.textContent = x.message; err.hidden = false; btn.disabled = false; btn.textContent = t('home.import'); }
   };
   const all = await api('/api/recipes');
+  let col = ''; try { col = localStorage.getItem('simmer-col') || ''; } catch { /* private mode */ }
+  const names = () => [...new Set(all.flatMap((r) => r.collections || []))].sort((a, b) => a.localeCompare(b, I18n.lang));
+  if (col && !names().includes(col)) col = '';
+  const drawCols = () => {
+    const ns = names();
+    $('#cols').innerHTML = ns.length ? [['', t('col.all'), all.length], ...ns.map((n) => [n, n, all.filter((r) => (r.collections || []).includes(n)).length])]
+      .map(([id, label, n]) => `<button class="fchip ${col === id ? 'on' : ''}" data-c="${esc(id)}">${esc(label)} <small>${n}</small></button>`).join('') : '';
+    $('#cols').querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => { col = b.dataset.c; try { localStorage.setItem('simmer-col', col); } catch { /* private mode */ } drawCols(); show(); }));
+  };
   const show = () => {
     const q = fold($('#q').value.trim());
-    const list = q ? all.filter((r) => fold(r.title).includes(q) || r.ingredients.some((i) => fold(i).includes(q))) : all;
-    $('#count').textContent = all.length ? (q ? '' : t('home.count', { n: all.length })) : '';
+    const inCol = col ? all.filter((r) => (r.collections || []).includes(col)) : all;
+    const list = q ? inCol.filter((r) => fold(r.title).includes(q) || r.ingredients.some((i) => fold(i).includes(q))) : inCol;
+    $('#count').textContent = all.length ? (q ? '' : t('home.count', { n: inCol.length })) : '';
     $('#cards').innerHTML = !all.length
       ? `<div class="empty"><img src="icon-192.png" alt=""><h2 class="sec">${t('home.emptyTitle')}</h2><p>${t('home.empty')}</p></div>`
       : !list.length ? `<p class="empty">${t('home.noMatch', { q: esc($('#q').value) })}</p>`
       : `<div class="grid">${list.map((r) => `<a class="rcard" href="#/r/${r.id}"><div class="pic" style="--tile:${tileOf(r.id)};${r.image ? `background-image:url('${esc(r.image)}')` : ''}">${r.image ? '' : esc([...r.title][0] || '')}</div><b>${esc(r.title)}</b><small>${esc(r.host)}</small></a>`).join('')}</div>`;
   };
-  $('#q').oninput = show; show();
+  $('#q').oninput = show; drawCols(); show();
 }
 
 /* ---------- recipe ---------- */
-async function recipe(id) {
+async function recipe(id, startCooking) {
   const r = await api('/api/recipes/' + id);
+  curTitle = r.title;
   const lang = I18n.lang;
   const base = Scale.parseYield(r.yield);
   let target = base, factor = 1;
@@ -115,6 +168,7 @@ async function recipe(id) {
     ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : r.mine && /^https?:/.test(r.sourceUrl || '') ? `<div class="nophoto">${ic('image')}<span>${t('photo.missingHere')}</span><button id="findPhoto">${t('photo.find')}</button><small class="err" id="fpErr" hidden></small></div>` : ''}
     <h1 class="rtitle">${esc(r.title)}</h1>
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
+    <div class="chips colrow" id="colrow"></div>
     <div class="facts" id="facts"></div>
     <div class="cta"><button class="primary" id="cookBtn">${t('recipe.cookBtn')}</button><button id="toList">${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
     <p class="muted sharedline" id="sharedline">${esc(r.mine ? S.shareText(r) : t('recipe.guest', { name: r.ownerName }))}</p>
@@ -128,7 +182,13 @@ async function recipe(id) {
     factor = base ? target / base : factor;
     $('#facts').innerHTML = facts().map(([k, v]) => `<div class="fact"><span>${k}</span><b>${esc(v)}</b></div>`).join('') +
       `<div class="src">${t('recipe.from')} ${r.sourceUrl ? `<a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.host)}</a>` : esc(r.host)}</div>`;
-    $('#ing').innerHTML = r.ingredients.map((i, n) => `<li><label><input type="checkbox" data-n="${n}" ${checked.has(n) ? 'checked' : ''}><span>${esc(sc(i))}</span></label></li>`).join('');
+    $('#ing').innerHTML = r.ingredients.map((i, n) => `<li><label><input type="checkbox" data-n="${n}" ${checked.has(n) ? 'checked' : ''}><span>${esc(sc(i))}</span></label><button class="quiet addone" data-add="${n}" aria-label="${esc(t('recipe.addOne'))}: ${esc(i)}" title="${esc(t('recipe.addOne'))}">${ic('plus')}</button></li>`).join('');
+    $('#ing').querySelectorAll('[data-add]').forEach((b) => (b.onclick = async () => {
+      const to = await pickList(t('recipe.addOneTo')); if (!to) return;
+      await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: [sc(r.ingredients[+b.dataset.add])] } });
+      b.innerHTML = ic('check'); b.classList.add('ok'); b.title = t('recipe.added', { n: 1, list: S.listName(to) });
+      flashNote(t('recipe.added', { n: 1, list: S.listName(to) }));
+    }));
     $('#ing').querySelectorAll('input').forEach((c) => (c.onchange = () => (c.checked ? checked.add(+c.dataset.n) : checked.delete(+c.dataset.n))));
     const box = $('#scaler');
     if (base) {
@@ -144,6 +204,25 @@ async function recipe(id) {
     }
   };
   draw();
+  const drawCols = () => {
+    $('#colrow').innerHTML = (r.collections || []).map((c) => `<span class="chip">${esc(c)}</span>`).join('') + (r.mine ? `<button class="quiet" id="colEdit">${ic('plus')} ${t(r.collections?.length ? 'col.edit' : 'col.add')}</button>` : '');
+    $('#colEdit')?.addEventListener('click', async () => {
+      const known = [...new Set((await api('/api/recipes')).flatMap((x) => x.collections || []))].sort((a, b) => a.localeCompare(b, I18n.lang));
+      const mineNow = new Set(r.collections || []);
+      S.modal(`<h2 class="sec">${t('col.title')}</h2><form id="cf" class="stack">${known.map((n) => `<label class="pick"><input type="checkbox" value="${esc(n)}" ${mineNow.has(n) ? 'checked' : ''}><span>${esc(n)}</span></label>`).join('')}
+        <label for="cn">${t('col.new')}</label><input id="cn" maxlength="40" autocomplete="off" placeholder="${esc(t('col.newPh'))}">
+        <div class="row end"><button type="button" class="quiet" data-x>${t('share.cancel')}</button><button class="primary">${t('share.save')}</button></div></form>`, (el, close) => {
+        $('[data-x]', el).onclick = close;
+        $('#cf', el).onsubmit = async (e) => {
+          e.preventDefault();
+          const picked = [...el.querySelectorAll('input[type=checkbox]:checked')].map((c) => c.value), extra = $('#cn', el).value.trim();
+          const u = await api('/api/recipes/' + id, { method: 'PUT', body: { collections: extra ? [...picked, extra] : picked } });
+          r.collections = u.collections; close(); drawCols();
+        };
+      });
+    });
+  };
+  drawCols();
 
   let tm; $('#notes').oninput = (e) => { clearTimeout(tm); tm = setTimeout(() => api('/api/recipes/' + id, { method: 'PUT', body: { notes: e.target.value } }), 600); };
   $('#del')?.addEventListener('click', async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } });
@@ -155,11 +234,10 @@ async function recipe(id) {
     catch (x) { b.disabled = false; b.textContent = t('photo.find'); $('#fpErr').textContent = x.message; $('#fpErr').hidden = false; }
   });
   $('#cookBtn').onclick = () => cook(st);
+  if (startCooking) { history.replaceState(null, '', '#/r/' + id); cook(st); }
   $('#toList').onclick = async () => {
-    const ls = await api('/api/lists');
     const lines = r.ingredients.map((i, n) => (checked.has(n) ? null : sc(i))).filter(Boolean);
-    let to = ls[0];
-    if (ls.length > 1) { const pick = prompt(t('recipe.pickList') + '\n' + ls.map((l, n) => `${n + 1}. ${S.listName(l)}`).join('\n'), '1'); if (!pick) return; to = ls[+pick - 1] || ls[0]; }
+    const to = await pickList(t('recipe.pickList')); if (!to) return;
     await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: lines } });
     $('#toList').textContent = t('recipe.added', { n: lines.length, list: S.listName(to) });
   };
@@ -173,11 +251,15 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && do
 function cook(st) {
   const el = $('#cook');
   const steps = st.r.steps.length ? st.r.steps : [''];
-  let i = 0, ingOpen = false, panel = false;
+  const rid = st.r.id, resumed = sessions.read()[rid];
+  let i = Math.min(Math.max(0, resumed?.step || 0), steps.length - 1), ingOpen = false, panel = false;
+  curTitle = st.r.title;
+  const remember = () => sessions.set(rid, { title: st.r.title, step: i, total: steps.length });
+  remember();
   document.body.classList.add('cooking'); el.classList.add('on'); lockScreen();
 
   const close = () => { el.classList.remove('on'); document.body.classList.remove('cooking'); wake?.release(); document.removeEventListener('keydown', key); el.innerHTML = ''; };
-  const go = (n) => { i = Math.min(steps.length - 1, Math.max(0, n)); panel = false; draw(); };
+  const go = (n) => { i = Math.min(steps.length - 1, Math.max(0, n)); panel = false; remember(); draw(); };
   const key = (e) => { if (e.target.matches('input,textarea')) return; if (e.key === 'ArrowRight') go(i + 1); else if (e.key === 'ArrowLeft') go(i - 1); else if (e.key === 'Escape') close(); };
 
   function draw() {
@@ -195,12 +277,12 @@ function cook(st) {
         <form id="cform"><input type="number" min="1" max="600" inputmode="numeric" placeholder="${esc(t('cook.custom'))}" aria-label="${esc(t('cook.custom'))}" required><button class="primary">${t('cook.start')}</button></form></div>` : ''}`;
     $('#cx', el).onclick = close;
     $('#cp', el).onclick = () => go(i - 1);
-    $('#cn', el).onclick = () => (last ? close() : go(i + 1));
+    $('#cn', el).onclick = () => (last ? (sessions.end(rid), close()) : go(i + 1));
     $('#cookIngBtn', el).onclick = () => { ingOpen = !ingOpen; $('.cook-ing', el).classList.toggle('open', ingOpen); };
     $('#ctimer', el).onclick = () => { panel = !panel; draw(); };
     el.querySelectorAll('.cook-ing input').forEach((c) => (c.onchange = () => (c.checked ? st.checked.add(+c.dataset.n) : st.checked.delete(+c.dataset.n))));
-    el.querySelectorAll('.addtimer [data-m]').forEach((b) => (b.onclick = () => { Timers.add({ label: t('timer.label'), seconds: +b.dataset.m * 60 }); panel = false; draw(); }));
-    $('#cform', el)?.addEventListener('submit', (e) => { e.preventDefault(); const m = +$('input', e.target).value; if (m > 0) { Timers.add({ label: t('timer.label'), seconds: Math.round(m * 60) }); panel = false; draw(); } });
+    el.querySelectorAll('.addtimer [data-m]').forEach((b) => (b.onclick = () => { Timers.add({ label: (curTitle ? short(curTitle) + ' · ' : '') + t('timer.label'), seconds: +b.dataset.m * 60 }); panel = false; draw(); }));
+    $('#cform', el)?.addEventListener('submit', (e) => { e.preventDefault(); const m = +$('input', e.target).value; if (m > 0) { Timers.add({ label: (curTitle ? short(curTitle) + ' · ' : '') + t('timer.label'), seconds: Math.round(m * 60) }); panel = false; draw(); } });
     // swipe between steps
     let x0 = null;
     const stepEl = $('#cstep', el);
@@ -298,10 +380,10 @@ function route() {
   const h = location.hash;
   const join = h.match(/^#\/join\/([\w-]+)/);
   if (join && !S.me) { S.authScreen('join', join[1]); return; }
-  chrome(); dockSig = ''; renderDock();
-  const m = h.match(/^#\/r\/([\w-]+)/);
+  chrome(); dockSig = ''; renderDock(); renderCookBar();
+  const m = h.match(/^#\/r\/([\w-]+)(\/cook)?/);
   const view = h.startsWith('#/lists') ? () => S.views.lists((h.match(/^#\/lists\/([\w-]+)/) || [])[1]) : h.startsWith('#/plan') ? () => S.views.plan() : h.startsWith('#/account') ? () => S.views.account()
-    : h.startsWith('#/import') ? importView : m ? () => recipe(m[1]) : home;
+    : h.startsWith('#/import') ? importView : m ? () => recipe(m[1], !!m[2]) : home;
   view().catch((e) => (app.innerHTML = `<p class="err">${esc(e.message)}</p>`));
   scrollTo(0, 0);
 }

@@ -68,6 +68,8 @@
   // Accounts, sharing, aisles, stores, meal plan.
   const MORE = {
     en: {
+      'col.title': 'Collections', 'col.all': 'All', 'col.add': 'Add to a collection', 'col.edit': 'Collections', 'col.new': 'New collection', 'col.newPh': 'Dinner, Desserts…',
+      'cook.now': 'Cooking now', 'cook.end': 'Stop cooking', 'recipe.addOne': 'Add to a list', 'recipe.addOneTo': 'Add to which list?', 'lists.edit': 'Edit',
       'lists.create': 'New list', 'lists.newTitle': 'New list', 'lists.search': 'Search lists', 'lists.back': 'All lists', 'lists.noMatch': 'No list matches.',
       'lists.remaining': '{n} items remaining', 'lists.remaining1': '1 item remaining', 'lists.noItems': 'No items', 'lists.hideChecked': 'Hide checked items', 'lists.showChecked': 'Show checked items',
       'lists.hiddenN': '{n} checked items hidden.', 'lists.icon': 'Icon', 'lists.noIcon': 'No icon', 'lists.color': 'Colour',
@@ -121,6 +123,8 @@
       'aisle.personal': 'Personal care', 'aisle.pets': 'Pets', 'aisle.other': 'Other',
     },
     fr: {
+      'col.title': 'Collections', 'col.all': 'Toutes', 'col.add': 'Ajouter à une collection', 'col.edit': 'Collections', 'col.new': 'Nouvelle collection', 'col.newPh': 'Soupers, Desserts…',
+      'cook.now': 'En cuisson', 'cook.end': 'Arrêter la cuisson', 'recipe.addOne': 'Ajouter à une liste', 'recipe.addOneTo': 'Ajouter à quelle liste ?', 'lists.edit': 'Modifier',
       'lists.create': 'Nouvelle liste', 'lists.newTitle': 'Nouvelle liste', 'lists.search': 'Chercher une liste', 'lists.back': 'Toutes les listes', 'lists.noMatch': 'Aucune liste ne correspond.',
       'lists.remaining': '{n} articles restants', 'lists.remaining1': '1 article restant', 'lists.noItems': 'Aucun article', 'lists.hideChecked': 'Masquer les articles cochés', 'lists.showChecked': 'Afficher les articles cochés',
       'lists.hiddenN': '{n} articles cochés masqués.', 'lists.icon': 'Icône', 'lists.noIcon': 'Aucune icône', 'lists.color': 'Couleur',

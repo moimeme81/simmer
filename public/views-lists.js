@@ -26,6 +26,7 @@
     el.querySelectorAll('[data-color]').forEach((b) => (b.onclick = () => { color = b.dataset.color; el.querySelectorAll('[data-color]').forEach((x) => x.classList.toggle('on', x === b)); onChange(icon, color); }));
   };
 
+  S.listBadge = badge;
   const orderFor = (l, storeId) => {
     const own = l.stores.find((s) => s.id === storeId)?.order;
     const first = (own?.length ? own : l.aisleOrder) || [];
@@ -50,8 +51,9 @@
 
     const itemRow = (i) => `<li class="${i.checked ? 'done' : ''}" data-id="${i.id}">
       <input type="checkbox" ${i.checked ? 'checked' : ''} aria-label="${esc(i.name)}">
-      <button class="n linklike" data-edit>${esc(i.name)}${i.quantity ? ` <span class="qty">${esc(i.quantity)}</span>` : ''}${i.details ? `<small>${esc(i.details)}</small>` : ''}</button>
-      ${!filter && i.store ? `<span class="chip soft">${esc(storeName(i.store))}</span>` : ''}</li>`;
+      <span class="n">${esc(i.name)}${i.quantity ? ` <span class="qty">${esc(i.quantity)}</span>` : ''}${i.details ? `<small>${esc(i.details)}</small>` : ''}</span>
+      ${!filter && i.store ? `<span class="chip soft">${esc(storeName(i.store))}</span>` : ''}
+      <button class="quiet editbtn" data-edit aria-label="${esc(t('lists.edit'))}: ${esc(i.name)}" title="${esc(t('lists.edit'))}">${ic('edit')}</button></li>`;
 
     S.app.innerHTML = `<div class="lists ${detailOnly ? 'show-detail' : ''}">
       <nav class="lindex" aria-label="${esc(t('nav.lists'))}">
@@ -115,7 +117,9 @@
       app.querySelectorAll('ul.items li[data-id]').forEach((li) => {
         const id = li.dataset.id;
         $('input', li).onchange = async (e) => { const it = cur.items.find((x) => x.id === id); it.checked = e.target.checked; draw(); await S.patch(`/api/lists/${cur.id}/items/${id}`, { checked: it.checked }); };
-        $('[data-edit]', li).onclick = () => itemSheet(cur.items.find((x) => x.id === id));
+        // Tapping anywhere on the line crosses the item off; the pencil at the end opens the editor.
+        li.onclick = (e) => { if (e.target.closest('[data-edit]') || e.target === $('input', li)) return; $('input', li).click(); };
+        $('[data-edit]', li).onclick = (e) => { e.stopPropagation(); itemSheet(cur.items.find((x) => x.id === id)); };
       });
       $('#clear')?.addEventListener('click', async () => { replace(await S.post(`/api/lists/${cur.id}/clear-checked`)); draw(); });
       $('#shareBtn')?.addEventListener('click', () => S.shareDialog(cur, async (share) => { replace(await S.put(`/api/lists/${cur.id}/share`, share)); draw(); }));

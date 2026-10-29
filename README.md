@@ -61,6 +61,10 @@ docker compose up -d --build
 - **Lists** open as a list of lists (name, icon, colour, items remaining, who it is shared with). Each list has its own aisles, stores and a hide-checked toggle. On a phone the index and the list are two screens.
 - **Recipe photos**: recipes saved without a picture (AnyList often leaves them out) are checked again every day against their source link, with growing pauses between failed tries. The Import page shows how many are missing and can run a search now; a recipe page has a *Find a photo* button.
 - **Profile pictures**: add one on the Account page. It is cropped square and shrunk in the browser, and shown in the menu, households, share dialogs and on shared meals.
+- **Collections**: tag recipes (Dinner, Desserts…) from the recipe page and filter the recipe box by them. The AnyList import brings your collections along.
+- **Cooking**: nothing starts until you press *Start cooking*. You can cook several recipes at once: each shows in a “Cooking now” bar with its step, and timers are labelled with their recipe.
+- **Adding ingredients**: use the + beside an ingredient to send just that one to a list you pick.
+- **List items**: tap a line to cross it off, tap the pencil to edit.
 - **Shared meals** show everyone invited, across households, in each person's own meal plan.
 
 ## Home Assistant

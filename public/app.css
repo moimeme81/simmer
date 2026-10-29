@@ -281,3 +281,29 @@ ol.order button{min-height:40px;min-width:40px;padding:0}
 .nophoto{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border:1px dashed var(--line);border-radius:var(--r);color:var(--mute);margin-bottom:6px}
 .nophoto svg.i{width:28px;height:28px}
 .lindex .lsearch input{border:0;background:transparent;min-height:44px;padding:0;border-radius:0}
+
+/* compact list rows: tap the line to cross it off, pencil to edit */
+ul.items li{padding:1px 4px;min-height:38px;gap:10px;cursor:pointer;font-size:16px;line-height:1.25}
+ul.items li:hover{background:var(--brand-soft)}
+ul.items input[type=checkbox]{width:20px;height:20px;flex:none}
+ul.items .n{padding:4px 0}
+ul.items small{font-size:13px;line-height:1.2}
+ul.items .editbtn{min-width:36px;min-height:36px;width:36px;padding:0;border:0;background:none;color:var(--mute);flex:none;cursor:pointer}
+ul.items .editbtn:hover{color:var(--brand);background:var(--surface)}
+ul.items .editbtn svg.i{width:18px;height:18px}
+.aislehead{padding:3px 4px;font-size:14px}.aisle{margin-top:8px}
+
+/* recipe: collections, add one ingredient, cooking now */
+.colrow{margin:6px 0 4px;align-items:center}
+.colrow .quiet{min-height:36px}
+ul.ing li{display:flex;align-items:center;gap:6px}ul.ing li label{flex:1}
+.addone{flex:none;min-width:36px;min-height:36px;width:36px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface)}
+.addone svg.i{width:18px;height:18px}.addone.ok{color:var(--brand);border-color:var(--brand)}
+.fchip small{opacity:.7;font-weight:400}
+.pickl{gap:8px}.pickrow{display:flex;align-items:center;gap:12px;justify-content:flex-start;min-height:52px;text-align:left;width:100%}
+#cookbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;max-width:1100px;margin:0 auto;padding:8px 16px;background:var(--amber-soft);border-bottom:1px solid var(--line)}
+#cookbar[hidden]{display:none}
+.cookchip{display:inline-flex;align-items:center;border:1.5px solid var(--amber);border-radius:999px;background:var(--surface);overflow:hidden}
+.cookchip a{padding:6px 12px;color:var(--ink);text-decoration:none;font-weight:700}.cookchip a small{font-weight:400;color:var(--mute);margin-left:4px}
+.cookchip button{min-height:34px;min-width:34px;padding:0;border:0;background:none;color:var(--mute)}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;z-index:60;font-weight:600;max-width:90vw}

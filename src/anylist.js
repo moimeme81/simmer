@@ -19,6 +19,16 @@ const ingredientLine = (i) => {
 // AnyList stores prep/cook time in seconds.
 const toMinutes = (s) => (Number(s) > 0 ? Math.round(Number(s) / 60) : null);
 
+/** AnyList keeps recipe collections ("Dinner", "Desserts"…) next to the recipes. Returns recipe id -> collection names. */
+async function collectionsByRecipe(any) {
+  const out = new Map();
+  try {
+    const cols = any.recipeCollections || (await any._getUserData(false))?.recipeDataResponse?.recipeCollections || [];
+    for (const c of cols) for (const id of c.recipeIds || []) out.set(id, [...(out.get(id) || []), c.name].filter(Boolean));
+  } catch { /* collections are a bonus: recipes still import without them */ }
+  return out;
+}
+
 function mapRecipe(r) {
   return {
     externalId: `anylist:${r.identifier}`,
@@ -97,11 +107,14 @@ class AnyListImport {
       this.set({ phase: 'fetching' });
       const recipes = await any.getRecipes();
       const lists = await any.getLists();
+      const inCollections = await collectionsByRecipe(any);
       this.set({ phase: 'recipes', total: recipes.length, listsTotal: lists.length });
 
       for (const r of recipes) {
         try {
           const mapped = mapRecipe(r);
+          const cols = inCollections.get(r.identifier);
+          if (cols) mapped.collections = cols;
           if (!mapped.title || (!mapped.ingredients.length && !mapped.steps.length)) { this.set({ skipped: (this.state.skipped || 0) + 1 }); continue; }
           const photo = r.photoUrls?.[0] ? await downloadPhoto(r.photoUrls[0], this.allowPrivate) : null;
           const res = this.upsertRecipe(mapped, photo);

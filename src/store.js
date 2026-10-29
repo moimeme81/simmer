@@ -55,7 +55,7 @@ class Store {
     const cur = this.get(id);
     if (!cur) return null;
     const next = { ...cur };
-    for (const k of ['title', 'notes', 'ingredients', 'steps', 'yield', 'rating']) if (k in patch) next[k] = patch[k];
+    for (const k of ['title', 'notes', 'ingredients', 'steps', 'yield', 'rating', 'collections']) if (k in patch) next[k] = patch[k];
     this.write(next);
     return next;
   }

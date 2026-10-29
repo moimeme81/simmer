@@ -253,3 +253,14 @@ test('photo finder: fills in missing pictures from the source page and retries f
     assert.equal((await fetch(base + (await get(og)).image)).status, 401);
   } finally { site.close(); }
 });
+
+test('recipe collections: set by the owner, cleaned, ignored from guests', async () => {
+  const rid = (await chris.post('/api/import/bulk/recipe', { title: 'Tarte', ingredients: ['a'], steps: ['b'], collections: [' Desserts ', 'Desserts', '', 'Fête'] })).json.id;
+  assert.deepEqual((await chris.get('/api/recipes/' + rid)).json.collections, ['Desserts', 'Fête']);
+  const put = await chris.put('/api/recipes/' + rid, { collections: ['Dinner', 'x'.repeat(100)] });
+  assert.deepEqual(put.json.collections, ['Dinner', 'x'.repeat(40)]);
+  const sisId = (await sis.get('/api/me')).json.id;
+  await chris.put(`/api/recipes/${rid}/share`, { users: [sisId], households: [] });
+  const g = await sis.put('/api/recipes/' + rid, { collections: ['Mine'] });
+  assert.deepEqual(g.json.collections, ['Dinner', 'x'.repeat(40)], 'guests cannot recategorise');
+});

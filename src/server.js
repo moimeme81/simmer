@@ -168,7 +168,8 @@ app.get('/api/recipes', (req, res) => res.json(store.list().filter((r) => acc.ca
 app.get('/api/recipes/:id', wrap((req, res) => res.json(recipeView(req, recipeFor(req)))));
 app.put('/api/recipes/:id', wrap((req, res) => {
   const r = recipeFor(req);
-  const patch = r.owner === me(req) ? req.body || {} : { notes: req.body?.notes }; // guests can only add notes
+  const patch = r.owner === me(req) ? { ...(req.body || {}) } : { notes: req.body?.notes }; // guests can only add notes
+  if ('collections' in patch) patch.collections = cleanCollections(patch.collections);
   res.json(recipeView(req, store.update(r.id, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)))));
 }));
 app.put('/api/recipes/:id/share', wrap((req, res) => {
@@ -196,6 +197,8 @@ app.post('/api/import', wrap(async (req, res) => {
  * Create or update one recipe imported from another app. Idempotent: a recipe with the
  * same externalId is updated, not duplicated. Used by the bulk endpoint and the AnyList job.
  */
+/** Collection names: trimmed, unique, at most 20 of up to 40 characters. */
+const cleanCollections = (v) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x ?? '').trim().slice(0, 40)).filter(Boolean))].slice(0, 20);
 function upsertImported(b, photoBuf, owner, share) {
   const title = str(b.title, 300).trim();
   const ingredients = strArr(b.ingredients);
@@ -213,6 +216,7 @@ function upsertImported(b, photoBuf, owner, share) {
     host: str(b.sourceName || hostOf(b.sourceUrl || '') || 'Imported', 200),
     method: str(b.importedFrom || 'import', 40),
     externalId: b.externalId ? str(b.externalId, 100) : undefined,
+    ...(Array.isArray(b.collections) ? { collections: cleanCollections(b.collections) } : {}),
   };
   // Match on (owner, externalId) so two people importing the same AnyList recipe each get their own copy.
   const existing = base.externalId && store.list().find((r) => r.externalId === base.externalId && r.owner === owner);
