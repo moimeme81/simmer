@@ -14,6 +14,7 @@
 - **Lists that know ingredients.** Items sort themselves into aisles, with your own store layouts, per-list categories and templates (groceries, hardware, IKEA, to-do, blank).
 - **Meal plan.** Week or month calendar, shared per meal, with “add to a list” scaled to the servings you planned.
 - **A household, or just you.** Invite family with a one-time link. Share recipes, lists and single meals with households or individual people.
+- **Link with a friend's Simmer.** Share recipes, lists, meals and whole collections across servers, live, one share at a time. See [docs/linking-simmers.md](docs/linking-simmers.md).
 - **Collections, search, ratings and notes** for a recipe box that stays easy to browse.
 - **Installable.** Works as an app on Android and iPhone (PWA), and inside Home Assistant.
 - **Home Assistant.** A HACS integration with the full app in the sidebar, to-do lists, a meal-plan calendar, sensors and services. See [docs/home-assistant.md](docs/home-assistant.md).
@@ -72,6 +73,7 @@ Then put it behind HTTPS: [docs/reverse-proxy.md](docs/reverse-proxy.md).
 - [Features in detail](docs/features.md): lists, units, photos, collections, cooking, editing
 - [Accounts, households and sharing](docs/accounts-and-sharing.md)
 - [Import and export](docs/import-export.md): AnyList, Mealie, Paprika, backups
+- [Linking Simmers](docs/linking-simmers.md): share with a friend who runs his own
 - [Home Assistant](docs/home-assistant.md): panel, entities, services, automations
 - [Reverse proxy and HTTPS](docs/reverse-proxy.md)
 
@@ -79,7 +81,7 @@ Then put it behind HTTPS: [docs/reverse-proxy.md](docs/reverse-proxy.md).
 
 ```
 npm install
-npm test          # node tests (server, units, importers, launcher)
+npm test          # node tests (server, units, importers, launcher, two linked servers)
 npm start         # http://localhost:3000, data in ./data with DATA_DIR=./data
 ```
 The Home Assistant integration is tested against real Home Assistant code: `pip install pytest-homeassistant-custom-component`, then `pytest`.

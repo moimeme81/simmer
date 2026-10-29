@@ -120,6 +120,7 @@
             <ul class="plain">${users.map((u) => `<li class="row between"><span>${esc(u.name)} <span class="muted">@${esc(u.username)}${u.admin ? ` · ${t('acct.admin')}` : ''}</span></span>
               ${u.id === me.id ? '' : `<span class="row"><button class="quiet" data-reset="${u.id}" data-n="${esc(u.name)}">${t('acct.reset')}</button><button class="quiet" data-ru="${u.id}" data-n="${esc(u.name)}">${t('acct.removeUser')}</button></span>`}</li>`).join('')}</ul>
           </section>` : ''}
+          ${me.admin || me.linkedSimmers ? '<section class="panel stack" id="fedbox"></section>' : ''}
         </div>
         <p style="margin-top:18px"><a href="#/import">${ic('import')} ${t('acct.importLink')}</a></p>`;
       wire();
@@ -155,6 +156,7 @@
         await S.put('/api/me', { autoShare: [...app.querySelectorAll('#as input:checked')].map((c) => c.value) });
         await S.refreshMe(); Object.assign(me, S.me);
       });
+      S.federationAccount($('#fedbox'));
       $('#tf').onsubmit = async (e) => { e.preventDefault(); newToken = (await S.post('/api/tokens', { name: $('#tn').value })).token; tokens.splice(0, tokens.length, ...(await api('/api/tokens'))); draw(); };
       $('#tkc')?.addEventListener('click', (e) => copy(newToken, e.target));
       app.querySelectorAll('[data-revoke]').forEach((b) => (b.onclick = async () => { await S.del('/api/tokens/' + b.dataset.revoke); tokens.splice(0, tokens.length, ...(await api('/api/tokens'))); draw(); }));

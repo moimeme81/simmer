@@ -156,6 +156,7 @@ async function home() {
       .map(([id, label, n]) => `<button class="fchip ${col === id ? 'on' : ''}" data-c="${esc(id)}">${esc(label)} <small>${n}</small></button>`).join('') : '';
     $('#cols').insertAdjacentHTML('beforeend', `<button class="quiet" id="colManage">${ic('gear')} ${t('col.manage')}</button>`);
     $('#colManage').onclick = manage;
+    if (col && S.me.linkedSimmers) { $('#cols').insertAdjacentHTML('beforeend', S.remoteShareButton('collection', col, col, 'quiet')); S.wireRemoteShare($('#cols')); }
     $('#cols').querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => { col = b.dataset.c; try { localStorage.setItem('simmer-col', col); } catch { /* private mode */ } drawCols(); show(); }));
   };
   const show = () => {
@@ -199,7 +200,7 @@ async function recipe(id, opts = {}) {
     ${r.description ? `<p class="rdesc">${esc(r.description)}</p>` : ''}
     <div class="chips colrow" id="colrow"></div>
     <div class="facts" id="facts"></div>
-    <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="editBtn">${ic('edit')} ${t('recipe.edit')}</button><button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
+    <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="editBtn">${ic('edit')} ${t('recipe.edit')}</button><button id="shareBtn">${ic('share')} ${t('share.button')}</button>${S.remoteShareButton('recipe', r.id, r.title)}<button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
     <p class="muted sharedline" id="sharedline">${esc(r.mine ? S.shareText(r) : t('recipe.guest', { name: r.ownerName }))}</p>
     <div class="rbody">
       <aside><h2 class="sec">${t('recipe.ingredients')}</h2><div class="scaler" id="scaler"></div><div class="unitbox" id="unitbox" role="group" aria-label="${esc(t('units.view'))}"></div><ul class="ing" id="ing"></ul></aside>
@@ -263,6 +264,7 @@ async function recipe(id, opts = {}) {
   $('#editBtn')?.addEventListener('click', () => S.recipeEditor(r, () => recipe(id, opts)));
   $('#del')?.addEventListener('click', async () => { if (confirm(t('recipe.confirmDelete'))) { await api('/api/recipes/' + id, { method: 'DELETE' }); location.hash = '#/'; } });
   $('#toPlan').onclick = () => S.mealSheet({ recipe: r, date: S.ymd(new Date()) }, () => { $('#toPlan').textContent = t('share.save') + ' ✓'; });
+  S.wireRemoteShare(app);
   $('#shareBtn')?.addEventListener('click', () => S.shareDialog(r, async (share) => { const u = await S.put(`/api/recipes/${id}/share`, share); r.sharedWith = u.sharedWith; $('#sharedline').textContent = S.shareText(r); }));
   $('#webPhoto')?.addEventListener('click', () => S.photoPicker(r.title, async (p) => {
     try { await S.post(`/api/recipes/${id}/image-from-url`, { url: p.url, alt: p.alt, credit: p.credit }); recipe(id, opts); }

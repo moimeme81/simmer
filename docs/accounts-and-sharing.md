@@ -10,3 +10,4 @@
 - Simmer does not do HTTPS itself. Put it behind a reverse proxy before exposing it to the internet.
 - Upgrading from a version without accounts: the first account you create becomes the owner of the existing recipes and lists.
   The old `AUTH_USER`/`AUTH_PASS` variables are ignored.
+- Friends who run their own Simmer can be linked too: see [Linking Simmers](linking-simmers.md).

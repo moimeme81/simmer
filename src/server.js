@@ -12,6 +12,7 @@ const { AISLES } = require('./ingredients');
 const { PhotoFinder } = require('./photos');
 const { searchImages } = require('./imagesearch');
 const X = require('./exchange');
+const { Federation, FedError } = require('./federation');
 
 const cfg = {
   port: +process.env.PORT || 3000,
@@ -27,6 +28,7 @@ const store = new Store(cfg.dataDir);
 const lists = new ListStore(cfg.dataDir, acc);
 const meals = new MealStore(cfg.dataDir);
 const photos = new PhotoFinder({ store, allowPrivate: cfg.allowPrivate });
+const fed = new Federation({ dataDir: cfg.dataDir, store, lists, meals, acc, debounceMs: +process.env.FEDERATION_DEBOUNCE_MS || 2500 });
 const avatarDir = path.join(cfg.dataDir, 'avatars');
 fs.mkdirSync(avatarDir, { recursive: true });
 
@@ -46,8 +48,9 @@ app.disable('x-powered-by');
 // Bulk-import endpoints carry photos as base64, so they get a larger body limit.
 const small = express.json({ limit: '1mb' });
 const big = express.json({ limit: '25mb' });
-app.use((req, res, next) => ((req.path.startsWith('/api/import/') && req.path !== '/api/import/') || /^\/api\/recipes\/[\w-]+\/image$/.test(req.path) ? big : small)(req, res, next));
+app.use((req, res, next) => ((req.path.startsWith('/api/import/') && req.path !== '/api/import/') || req.path.startsWith('/api/federation/') || /^\/api\/recipes\/[\w-]+\/image$/.test(req.path) ? big : small)(req, res, next));
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.use((req, res, next) => { if (req.method !== 'GET' && req.path.startsWith('/api/')) res.on('finish', () => { if (res.statusCode < 400 && !req.path.startsWith('/api/federation/push')) fed.schedule(); }); next(); });
 
 /* ---------- authentication ---------- */
 const COOKIE = 'simmer_sid';
@@ -81,7 +84,7 @@ const str = (v, max = 5000) => String(v ?? '').slice(0, max);
 const strArr = (v, max = 500) => (Array.isArray(v) ? v.map((x) => str(x, 2000).trim()).filter(Boolean).slice(0, max) : []);
 const me = (req) => req.user.id;
 const myShare = (req) => ({ users: [], households: [...(req.user.autoShare || [])].filter((h) => acc.household(h)?.members.includes(me(req))) });
-const nameOf = (id) => acc.user(id)?.name || '?';
+const nameOf = (id) => acc.user(id)?.name || fed.remoteName(id) || '?';
 const today = () => new Date().toLocaleDateString('sv-SE');
 
 app.get('/api/auth/state', (req, res) => res.json({ setup: acc.needsSetup, user: acc.publicUser(req.user) || null, ai: !!cfg.anthropicKey }));
@@ -114,10 +117,28 @@ app.post('/api/auth/register', wrap((req, res) => {
   res.json(acc.publicUser(u));
 }));
 
+/* ---------- linked Simmers: calls from another server (they sign in with the shared token, not a person's session) ---------- */
+const badToken = new Map();
+const peerAuth = (req, _res, next) => {
+  const ip = req.ip, n = badToken.get(ip) || { c: 0, t: Date.now() };
+  if (Date.now() - n.t > 60_000) { n.c = 0; n.t = Date.now(); }
+  if (n.c >= 30) return next(fail(429, 'Too many tries'));
+  const peer = fed.bySecret(bearerOf(req));
+  if (!peer) { n.c++; badToken.set(ip, n); return next(fail(401, 'The shared token is not recognised')); }
+  req.peer = peer;
+  next();
+};
+const fedJson = (fn) => wrap(async (req, res) => { try { res.json(await fn(req)); } catch (e) { throw e instanceof FedError ? Object.assign(e, { status: e.status }) : e; } });
+app.get('/api/federation/ping', peerAuth, (req, res) => res.json({ ok: true, simmer: true, as: req.peer.name }));
+app.post('/api/federation/push', peerAuth, fedJson((req) => fed.receivePush(req.peer, req.body || {})));
+app.post('/api/federation/revoke', peerAuth, fedJson((req) => fed.receiveRevoke(req.peer, req.body || {})));
+app.post('/api/federation/declined', peerAuth, fedJson((req) => fed.receiveDeclined(req.peer, req.body || {})));
+app.post('/api/federation/list-op', peerAuth, fedJson((req) => fed.receiveListOp(req.peer, req.body || {})));
+
 app.use('/api', (req, res, next) => (req.path.startsWith('/auth/') ? next() : need(req, res, next)));
 
 /* ---------- me, people, tokens, admin ---------- */
-app.get('/api/me', (req, res) => res.json({ ...acc.publicUser(req.user), households: acc.describeHouseholds(me(req)) }));
+app.get('/api/me', (req, res) => res.json({ ...acc.publicUser(req.user), households: acc.describeHouseholds(me(req)), linkedSimmers: fed.db.peers.length }));
 app.put('/api/me', wrap((req, res) => res.json(acc.publicUser(acc.updateProfile(me(req), { ...req.body, keepSession: req.sessionId })))));
 app.get('/api/people', (_req, res) => res.json(acc.people()));
 app.get('/api/aisles', (_req, res) => res.json(AISLES));
@@ -264,6 +285,7 @@ app.put('/api/recipes/:id/share', wrap((req, res) => {
 }));
 app.delete('/api/recipes/:id', wrap((req, res) => {
   const r = recipeFor(req);
+  if (r.remote && (r.users || []).includes(me(req))) { store.remove(r.id); fed.decline('recipe', r, req.user); return res.json({ ok: true }); } // a copy shared from another Simmer: just take it off my side
   if (r.owner !== me(req)) throw fail(403, 'Only the owner can delete a recipe');
   store.remove(r.id);
   res.json({ ok: true });
@@ -434,6 +456,25 @@ app.post('/api/exchange/mealie/export', need, wrap((req, res) => {
 }));
 app.get('/api/exchange/status', need, (req, res) => res.json(exchFor(req.user).status()));
 
+/* ---------- linked Simmers: setting up (admins) and sharing with people there ---------- */
+app.get('/api/peers', (req, res) => res.json(fed.db.peers.map((p) => fed.peerView(p, !!req.user.admin))));
+app.post('/api/admin/peers', admin, wrap((req, res) => {
+  const p = fed.addPeer(req.body || {}, req.user);
+  res.json({ ...fed.peerView(p, true), secret: p.secret });
+}));
+app.delete('/api/admin/peers/:id', admin, wrap((req, res) => { if (!fed.removePeer(req.params.id)) throw notFound(); res.json({ ok: true }); }));
+app.post('/api/admin/peers/:id/test', admin, wrap(async (req, res) => {
+  const p = fed.peer(req.params.id);
+  if (!p) throw notFound();
+  try { await fed.ping(p); res.json({ ok: true }); } catch (e) { res.json({ ok: false, error: e.message }); }
+}));
+app.get('/api/remote-shares', wrap((req, res) => res.json(fed.sharesOf(me(req), str(req.query.kind, 20), str(req.query.ref, 200)).map((s) => fed.shareView(s)))));
+app.post('/api/remote-shares', wrap(async (req, res) => {
+  const b = req.body || {};
+  res.json(fed.shareView(await fed.createShare(req.user, { peerId: str(b.peerId, 60), toUser: str(b.toUser, 60), kind: str(b.kind, 20), ref: str(b.ref, 200) })));
+}));
+app.delete('/api/remote-shares/:id', wrap(async (req, res) => { if (!(await fed.removeShare(req.user, req.params.id))) throw notFound(); res.json({ ok: true }); }));
+
 /* ---------- recipe collections: ordered per person, renamed or removed across their recipes ---------- */
 const myRecipes = (req) => store.list().filter((r) => r.owner === me(req));
 const saveCollections = (req, names) => { acc.user(me(req)).collections = cleanCollections(names); acc.save(); };
@@ -501,6 +542,7 @@ app.post('/api/lists', wrap((req, res) => {
 }));
 app.delete('/api/lists/:id', wrap((req, res) => {
   const l = listFor(req);
+  if (l.remote && (l.users || []).includes(me(req))) { lists.deleteList(l.id); fed.decline('list', l, req.user); return res.json({ ok: true }); }
   if (l.owner !== me(req)) throw fail(403, 'Only the owner can delete a list');
   lists.deleteList(l.id);
   res.json({ ok: true });
@@ -510,21 +552,39 @@ app.put('/api/lists/:id/share', wrap((req, res) => {
   if (l.owner !== me(req)) throw fail(403, 'Only the owner can change sharing');
   res.json(listView(req, lists.setShare(l.id, acc.cleanShare(me(req), req.body))));
 }));
-app.put('/api/lists/:id/settings', wrap((req, res) => { listFor(req); res.json(listView(req, lists.settings(req.params.id, req.body || {}))); }));
-app.post('/api/lists/:id/items', wrap((req, res) => {
-  listFor(req);
+app.put('/api/lists/:id/settings', wrap((req, res) => { if (listFor(req).remote) throw fail(403, 'This list is shared from another Simmer. Its owner changes its settings.'); res.json(listView(req, lists.settings(req.params.id, req.body || {}))); }));
+/** Add to a list; a list shared from another Simmer is changed on its owner's server, which sends the new list back. */
+async function addToList(req, listId, items, opts) {
+  const l = listFor({ params: { id: listId }, user: req.user });
+  return l.remote ? fed.listOp(l, req.user, { type: 'add', items, skipStaples: !!opts?.skipStaples }) : lists.addItems(listId, items, opts);
+}
+app.post('/api/lists/:id/items', wrap(async (req, res) => {
   const items = Array.isArray(req.body?.items) ? req.body.items : [req.body];
-  res.json(listView(req, lists.addItems(req.params.id, items)));
+  res.json(listView(req, await addToList(req, req.params.id, items)));
 }));
-app.patch('/api/lists/:id/items/:itemId', wrap((req, res) => {
-  listFor(req);
+app.patch('/api/lists/:id/items/:itemId', wrap(async (req, res) => {
+  const l = listFor(req);
+  if (l.remote) {
+    const out = await fed.listOp(l, req.user, { type: 'update', itemId: req.params.itemId, patch: req.body || {} });
+    const got = out.items.find((x) => x.id === req.params.itemId);
+    if (!got) throw notFound();
+    return res.json(got);
+  }
   const it = lists.updateItem(req.params.id, req.params.itemId, req.body || {});
   if (!it) throw notFound();
   res.json(it);
 }));
-app.delete('/api/lists/:id/items/:itemId', wrap((req, res) => { listFor(req); if (!lists.deleteItem(req.params.id, req.params.itemId)) throw notFound(); res.json({ ok: true }); }));
-app.post('/api/lists/:id/clear-checked', wrap((req, res) => { listFor(req); res.json(listView(req, lists.clearChecked(req.params.id))); }));
-app.post('/api/recipes/:id/to-list', wrap((req, res) => {
+app.delete('/api/lists/:id/items/:itemId', wrap(async (req, res) => {
+  const l = listFor(req);
+  if (l.remote) { await fed.listOp(l, req.user, { type: 'delete', itemId: req.params.itemId }); return res.json({ ok: true }); }
+  if (!lists.deleteItem(req.params.id, req.params.itemId)) throw notFound();
+  res.json({ ok: true });
+}));
+app.post('/api/lists/:id/clear-checked', wrap(async (req, res) => {
+  const l = listFor(req);
+  res.json(listView(req, l.remote ? await fed.listOp(l, req.user, { type: 'clear' }) : lists.clearChecked(req.params.id)));
+}));
+app.post('/api/recipes/:id/to-list', wrap(async (req, res) => {
   const r = recipeFor(req);
   // The page sends the (possibly scaled) ingredient lines; fall back to the stored ones.
   let lines = Array.isArray(req.body?.ingredients) ? strArr(req.body.ingredients) : r.ingredients;
@@ -533,8 +593,7 @@ app.post('/api/recipes/:id/to-list', wrap((req, res) => {
   if (!Array.isArray(req.body?.ingredients) && want > 0 && have) lines = lines.map((l) => Scale.scaleLine(l, want / have));
   const listId = req.body?.listId || lists.all().find((l) => acc.canAccess(me(req), l))?.id;
   if (!listId) throw notFound();
-  listFor({ params: { id: listId }, user: req.user });
-  res.json(listView(req, lists.addItems(listId, lines.map((name) => ({ name, details: [r.title, str(req.body?.note, 80).trim()].filter(Boolean).join(' · ') })), { skipStaples: true })));
+  res.json(listView(req, await addToList(req, listId, lines.map((name) => ({ name, details: [r.title, str(req.body?.note, 80).trim()].filter(Boolean).join(' · ') })), { skipStaples: true })));
 }));
 
 /* ---------- meal plan ---------- */
@@ -577,11 +636,12 @@ app.put('/api/meals/:id', wrap((req, res) => {
 }));
 app.delete('/api/meals/:id', wrap((req, res) => {
   const m = mealFor(req);
+  if (m.remote) { meals.remove(m.id); fed.decline('meal', m, req.user); return res.json({ ok: true }); }
   if (m.owner === me(req)) meals.remove(m.id);
   else meals.leave(m.id, me(req)); // a guest only takes it off their own plan
   res.json({ ok: true });
 }));
-app.post('/api/meals/to-list', wrap((req, res) => {
+app.post('/api/meals/to-list', wrap(async (req, res) => {
   const b = req.body || {};
   const listId = b.listId || lists.all().find((l) => acc.canAccess(me(req), l))?.id;
   if (!listId) throw notFound();
@@ -595,7 +655,7 @@ app.post('/api/meals/to-list', wrap((req, res) => {
     const factor = base && m.servings ? m.servings / base : 1;
     const lines = r.ingredients.map((i) => Scale.scaleLine(i, factor, { lang }));
     const when = new Date(m.date + 'T12:00:00').toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
-    lists.addItems(listId, lines.map((name) => ({ name, details: `${r.title} · ${lang === 'fr' ? 'pour' : 'for'} ${when}` })), { skipStaples: true });
+    await addToList(req, listId, lines.map((name) => ({ name, details: `${r.title} · ${lang === 'fr' ? 'pour' : 'for'} ${when}` })), { skipStaples: true });
     added += lines.length;
   }
   res.json({ added, list: listView(req, lists.get(listId)) });
@@ -649,10 +709,11 @@ const indexHtml = () => fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8')
 const sendIndex = (_req, res) => res.set('Cache-Control', 'no-cache').type('html').send(indexHtml());
 app.get(['/', '/index.html'], sendIndex);
 app.use(express.static(PUBLIC, { setHeaders: (res, file) => { if (/\.(js|css|html)$/.test(file)) res.set('Cache-Control', 'no-cache'); if (/sw\.js$/.test(file)) res.set('Service-Worker-Allowed', '/'); } }));
-app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message }));
+app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message, ...(err.code ? { code: err.code } : {}) }));
 
 if (require.main === module) {
   if (process.env.PHOTO_CHECK !== 'false') photos.start();
+  fed.start();
   app.listen(cfg.port, '0.0.0.0', () =>
     console.log(`Simmer listening on :${cfg.port} (data: ${cfg.dataDir}, AI: ${cfg.anthropicKey ? 'on' : 'off'}, users: ${acc.db.users.length})`)
   );
