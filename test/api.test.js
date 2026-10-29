@@ -416,3 +416,105 @@ test('the page revalidates and script URLs are fingerprinted so caches cannot se
   const js = await fetch(base + '/app.js?v=anything');
   assert.equal(js.status, 200); assert.match(js.headers.get('cache-control'), /no-cache/);
 });
+
+/* ---------- export and import ---------- */
+const rawGet = async (p, u) => { const r = await p.fetchRaw(u); return { status: r.status, type: r.headers.get('content-type'), buf: Buffer.from(await r.arrayBuffer()) }; };
+const upload = async (p, buf, name) => {
+  // reuse chris's cookie through his own fetchRaw by logging in fresh
+  const login = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'chris', password: 'correct horse' }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const r = await fetch(base + '/api/import/file', { method: 'POST', headers: { cookie, 'content-type': 'application/octet-stream', 'x-filename': encodeURIComponent(name) }, body: buf });
+  return { status: r.status, json: await r.json() };
+};
+
+test('a backup restores recipes, collections, lists and meals, and importing it twice does not duplicate', async () => {
+  const X = require('../src/exchange');
+  const { readZip } = require('../src/zip');
+  await chris.post('/api/recipes', { title: 'Exchange soup', ingredients: ['2 cups stock', '1 onion'], steps: ['Simmer.'], collections: ['Soups'], description: 'Warm', totalMinutes: 30 }).catch(() => {});
+  const bk = await rawGet(chris, '/api/export/backup');
+  assert.equal(bk.status, 200);
+  const names = readZip(bk.buf).map((e) => e.name);
+  assert.ok(names.includes('simmer.json') && names.some((n) => n.startsWith('recipes/')));
+  const before = (await chris.get('/api/recipes')).json.length;
+  const a = await upload(chris, bk.buf, 'backup.zip');
+  assert.equal(a.status, 200);
+  assert.equal(a.json.format, 'Simmer backup');
+  assert.equal(a.json.imported + a.json.updated + a.json.skipped >= 1, true);
+  const again = await upload(chris, bk.buf, 'backup.zip');
+  assert.equal(again.json.imported, 0, 'second import only updates');
+  assert.ok((await chris.get('/api/recipes')).json.length <= before + a.json.imported);
+});
+
+test('Paprika, cookbook zips and schema.org files come in; other formats go out and are readable', async () => {
+  const X = require('../src/exchange');
+  const pap = await rawGet(chris, '/api/export/paprika');
+  assert.equal(pap.status, 200);
+  const parsed = X.parseUpload(pap.buf, 'x.paprikarecipes');
+  assert.equal(parsed.format, 'Paprika');
+  assert.ok(parsed.items.length >= 1);
+  const cb = await rawGet(chris, '/api/export/cookbook');
+  const parsed2 = X.parseUpload(cb.buf, 'cookbook.zip');
+  assert.equal(parsed2.format, 'schema.org');
+  assert.equal(parsed2.items.length, parsed.items.length);
+  const ld = Buffer.from(JSON.stringify({ '@context': 'https://schema.org', '@type': 'Recipe', name: 'LD pancakes', recipeIngredient: ['1 cup flour'], recipeInstructions: ['Fry.'], prepTime: 'PT10M', keywords: 'breakfast, quick' }));
+  const r = await upload(chris, ld, 'pancakes.json');
+  assert.equal(r.json.imported, 1);
+  assert.equal((await rawGet(chris, '/api/export/lists.csv')).type.startsWith('text/csv'), true);
+  const ics = (await rawGet(chris, '/api/export/mealplan.ics')).buf.toString();
+  assert.match(ics, /BEGIN:VCALENDAR/);
+  assert.equal((await rawGet(person(), '/api/export/backup')).status, 401);
+  assert.equal((await upload(chris, Buffer.from('not a recipe'), 'x.txt')).status, 422);
+});
+
+test('a Mealie server can be read from and written to', async () => {
+  const http = require('node:http');
+  const X = require('../src/exchange');
+  const created = [], posted = [];
+  const recipes = [{ id: 'm1', slug: 'mealie-stew', name: 'Mealie stew', image: 'abc', recipeServings: 4, totalTime: '1 hour 20 minutes', orgURL: 'https://example.com/stew', rating: 4,
+    recipeIngredient: [{ display: '2 carrots', note: 'carrots' }, { note: '1 tsp salt' }], recipeInstructions: [{ text: 'Chop.' }, { title: 'Cook', text: 'Boil.' }], recipeCategory: [{ name: 'Dinner' }], tags: [{ name: 'Easy' }], notes: [{ title: 'Tip', text: 'Better next day' }] }];
+  const srv = http.createServer((req, res) => {
+    let body = [];
+    req.on('data', (c) => body.push(c));
+    req.on('end', () => {
+      const send = (code, o) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(typeof o === 'string' ? JSON.stringify(o) : JSON.stringify(o)); };
+      if (req.headers.authorization !== 'Bearer good') return send(401, {});
+      const u = req.url.split('?')[0];
+      if (u === '/api/users/self') return send(200, { username: 'chef' });
+      if (u === '/api/recipes' && req.method === 'GET') return send(200, { page: 1, total: recipes.length, items: recipes.map(({ id, slug, name, image }) => ({ id, slug, name, image })) });
+      if (u === '/api/recipes' && req.method === 'POST') { const n = JSON.parse(Buffer.concat(body)).name; created.push({ name: n }); posted.push(n); return send(201, n.toLowerCase().replace(/\W+/g, '-')); }
+      if (u.startsWith('/api/recipes/') && u.endsWith('/image')) { created[created.length - 1].image = true; return send(200, {}); }
+      if (u.startsWith('/api/recipes/') && req.method === 'PUT') { Object.assign(created[created.length - 1], JSON.parse(Buffer.concat(body))); return send(200, {}); }
+      if (u.startsWith('/api/recipes/')) { const r = recipes.find((x) => x.slug === u.split('/').pop()); return r ? send(200, r) : send(200, { id: 'new', name: 'x', recipeIngredient: [], recipeInstructions: [] }); }
+      if (u.startsWith('/api/media/')) { res.writeHead(404); return res.end(); }
+      if (u === '/api/organizers/categories' && req.method === 'GET') return send(200, { items: [] });
+      if (u === '/api/organizers/categories') return send(201, { id: 'c1', name: JSON.parse(Buffer.concat(body)).name, slug: 'c' });
+      send(404, {});
+    });
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    assert.equal((await chris.post('/api/exchange/mealie/import', { url, token: 'bad' })).status, 202);
+    const wait = async () => { for (let i = 0; i < 100; i++) { const s = (await chris.get('/api/exchange/status')).json; if (s.state !== 'running') return s; await new Promise((r) => setTimeout(r, 50)); } throw new Error('timeout'); };
+    const bad = await wait();
+    assert.equal(bad.state, 'error');
+    assert.match(bad.error, /refused that token/);
+    assert.equal((await chris.post('/api/exchange/mealie/import', { url, token: 'good' })).status, 202);
+    const ok = await wait();
+    assert.equal(ok.state, 'done', JSON.stringify(ok));
+    assert.equal(ok.done, 1);
+    const mine = (await chris.get('/api/recipes')).json.find((r) => r.title === 'Mealie stew');
+    assert.ok(mine);
+    assert.deepEqual(mine.ingredients, ['2 carrots', '1 tsp salt']);
+    assert.equal(mine.totalMinutes, 80);
+    assert.ok(mine.collections.includes('Dinner') && mine.collections.includes('Easy'));
+    assert.match(mine.notes, /Better next day/);
+    assert.equal((await chris.post('/api/exchange/mealie/export', { url, token: 'good' })).status, 202);
+    const out = await wait();
+    assert.equal(out.state, 'done', JSON.stringify(out));
+    assert.ok(out.done >= 1 && out.skipped >= 1, 'Mealie stew already exists there, so it is skipped');
+    assert.ok(posted.includes('Exchange soup') || posted.includes('LD pancakes'));
+    assert.ok(created.some((c) => Array.isArray(c.recipeIngredient) && c.recipeIngredient.length), 'ingredients were sent');
+    assert.equal((await chris.post('/api/exchange/mealie/import', { url: 'nonsense', token: 'x' })).status, 400);
+  } finally { srv.close(); }
+});

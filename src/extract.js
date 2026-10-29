@@ -118,21 +118,19 @@ function findRecipeNodes(json) {
   return found;
 }
 
-function fromJsonLd($, sourceUrl) {
-  const nodes = [];
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try { nodes.push(...findRecipeNodes(JSON.parse($(el).contents().text()))); } catch { /* ignore bad JSON */ }
-  });
-  const r = nodes[0];
-  if (!r) return null;
+/** Maps one schema.org Recipe node to Simmer's fields. `base` (a page address) turns relative image paths into full ones. */
+function fromLdNode(r, base, fallbackTitle) {
   const ingredients = asArray(r.recipeIngredient || r.ingredients).map((s) => decode(clean(s))).filter(Boolean);
   const instructions = steps(r.recipeInstructions);
   if (!ingredients.length && !instructions.length) return null;
   const author = asArray(r.author)[0];
+  const img = imageOf(r.image);
+  let image = img || null;
+  if (img && base) { try { image = new URL(img, base).toString(); } catch { image = null; } }
   return {
-    title: decode(clean(r.name)) || $('title').text().trim(),
+    title: decode(clean(r.name)) || fallbackTitle || '',
     description: decode(clean(r.description)),
-    image: imageOf(r.image) ? new URL(imageOf(r.image), sourceUrl).toString() : null,
+    image,
     author: typeof author === 'string' ? author : author?.name || null,
     yield: asArray(r.recipeYield).map(String).join(', ') || null,
     prepMinutes: parseDuration(r.prepTime),
@@ -142,6 +140,15 @@ function fromJsonLd($, sourceUrl) {
     steps: instructions,
     method: 'schema.org',
   };
+}
+
+function fromJsonLd($, sourceUrl) {
+  const nodes = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try { nodes.push(...findRecipeNodes(JSON.parse($(el).contents().text()))); } catch { /* ignore bad JSON */ }
+  });
+  const r = nodes[0];
+  return r ? fromLdNode(r, sourceUrl, $('title').text().trim()) : null;
 }
 
 /* ---------- optional LLM fallback ---------- */
@@ -231,4 +238,4 @@ function pageImage(html, pageUrl) {
   return null;
 }
 
-module.exports = { extractRecipe, fromJsonLd, parseDuration, isPrivateIp, assertPublic, fetchHtml, pageImage };
+module.exports = { extractRecipe, fromJsonLd, fromLdNode, findRecipeNodes, parseDuration, isPrivateIp, assertPublic, fetchHtml, pageImage };

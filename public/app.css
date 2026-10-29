@@ -345,3 +345,9 @@ ol.cats input:not([type=color]){flex:1;min-width:0}
 .credit{display:block;margin-top:4px}
 .changephoto{display:inline-flex;margin-top:6px}
 @media(max-width:600px){.pgrid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px}}
+
+.xlist{display:grid;gap:2px}
+.xrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.xrow:first-child{border-top:0}
+.xrow button{flex:none}
+.xrow .muted{font-size:15px}

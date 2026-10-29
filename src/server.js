@@ -11,6 +11,7 @@ const { AnyListImport, downloadPhoto } = require('./anylist');
 const { AISLES } = require('./ingredients');
 const { PhotoFinder } = require('./photos');
 const { searchImages } = require('./imagesearch');
+const X = require('./exchange');
 
 const cfg = {
   port: +process.env.PORT || 3000,
@@ -291,9 +292,9 @@ function upsertImported(b, photoBuf, owner, share) {
   const num = (v) => (Number.isFinite(+v) && +v > 0 ? Math.round(+v) : null);
   const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
   const base = {
-    title, description: '', author: null,
+    title, description: str(b.description, 3000), author: b.author ? str(b.author, 200) : null,
     yield: b.yield ? str(b.yield, 100) : null,
-    prepMinutes: num(b.prepMinutes), cookMinutes: num(b.cookMinutes), totalMinutes: null,
+    prepMinutes: num(b.prepMinutes), cookMinutes: num(b.cookMinutes), totalMinutes: num(b.totalMinutes),
     ingredients, steps, notes: str(b.notes, 10000),
     rating: num(b.rating) ? Math.min(5, num(b.rating)) : null,
     sourceUrl: /^https?:\/\//.test(b.sourceUrl || '') ? str(b.sourceUrl, 2000) : null,
@@ -346,6 +347,92 @@ app.post('/api/import/anylist', wrap((req, res) => {
   res.status(202).json({ started: true });
 }));
 app.get('/api/import/anylist/status', (req, res) => res.json(jobFor(req.user).status()));
+
+/* ---------- export and import with other apps ---------- */
+const photoOf = (r) => {
+  const m = /^\/images\/([\w-]+\.(?:jpg|png|webp))/.exec(r.image || '');
+  if (!m) return null;
+  try { return fs.readFileSync(path.join(store.imageDir, m[1])); } catch { return null; }
+};
+const recipesFor = (req, ownOnly = true) => store.list().filter((r) => (ownOnly ? r.owner === me(req) : acc.canAccess(me(req), r))).map((rec) => ({ rec, photo: photoOf(rec) }));
+const sendFile = (res, name, type, data) => {
+  res.set({ 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' });
+  res.send(data);
+};
+const stamp = () => new Date().toLocaleDateString('sv-SE');
+app.get('/api/export/backup', need, wrap((req, res) => {
+  const mine = recipesFor(req);
+  const ls = lists.all().filter((l) => l.owner === me(req));
+  const ms = meals.all().filter((m) => m.owner === me(req));
+  sendFile(res, `simmer-backup-${stamp()}.zip`, 'application/zip', X.buildBackup({ recipes: mine, lists: ls, meals: ms, collections: acc.user(me(req)).collections || [], account: req.user.name }));
+}));
+app.get('/api/export/paprika', need, wrap((req, res) => sendFile(res, `simmer-${stamp()}.paprikarecipes`, 'application/octet-stream', X.buildPaprika(recipesFor(req)))));
+app.get('/api/export/cookbook', need, wrap((req, res) => sendFile(res, `simmer-cookbook-${stamp()}.zip`, 'application/zip', X.buildCookbook(recipesFor(req)))));
+app.get('/api/export/lists.csv', need, wrap((req, res) => sendFile(res, `simmer-lists-${stamp()}.csv`, 'text/csv; charset=utf-8', X.listsCsv(lists.all().filter((l) => acc.canAccess(me(req), l))))));
+app.get('/api/export/mealplan.ics', need, wrap((req, res) => {
+  const ms = visibleMeals(req, '', '').map((m) => mealView(req, m));
+  sendFile(res, `simmer-meal-plan-${stamp()}.ics`, 'text/calendar; charset=utf-8', X.mealPlanIcs(ms));
+}));
+
+const shareOf = (user) => ({ users: [], households: (acc.user(user.id)?.autoShare || []).filter((h) => acc.household(h)?.members.includes(user.id)) });
+app.post('/api/import/file', need, express.raw({ type: () => true, limit: '300mb' }), wrap((req, res) => {
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || !buf.length) throw fail(400, 'Choose a file to import');
+  let doc;
+  try { doc = X.parseUpload(buf, decodeURIComponent(String(req.headers['x-filename'] || ''))); } catch (e) { throw fail(e.status || 422, e.message); }
+  const out = { format: doc.format || 'unknown', imported: 0, updated: 0, skipped: doc.skipped, photos: 0, lists: 0, meals: 0, errors: [] };
+  const share = shareOf(req.user), idMap = new Map();
+  for (const { data, photo } of doc.items) {
+    try {
+      const { _was, ...d } = data;
+      const r = upsertImported({ ...d, photoBase64: undefined }, photo, me(req), share);
+      if (_was) idMap.set(_was, r.id);
+      r.updated ? out.updated++ : out.imported++;
+      if (r.image && photo) out.photos++;
+    } catch (e) { out.skipped++; if (out.errors.length < 10) out.errors.push(`${data.title || '?'}: ${e.message}`); }
+  }
+  const names = cleanCollections([...(acc.user(me(req)).collections || []), ...doc.collections, ...doc.items.flatMap((i) => i.data.collections || [])]);
+  if (names.length) saveCollections(req, names);
+  for (const l of doc.lists) {
+    if (!l?.name) continue;
+    const out2 = lists.importList({ owner: me(req), externalId: l.externalId || `simmer:${l.id}`, name: str(l.name, 80), items: Array.isArray(l.items) ? l.items.slice(0, 5000) : [] });
+    lists.setShare(out2.id, share);
+    out.lists++;
+  }
+  const have = new Set(meals.all().filter((m) => m.owner === me(req)).map((m) => `${m.date}|${m.slot}|${m.recipeId || m.title}`));
+  for (const m of doc.meals) {
+    try {
+      const recipeId = m.recipeId ? idMap.get(m.recipeId) || (store.get(m.recipeId)?.owner === me(req) ? m.recipeId : null) : null;
+      const key = `${m.date}|${m.slot}|${recipeId || m.title}`;
+      if (have.has(key) || (!recipeId && !m.title)) continue;
+      meals.create(me(req), { ...m, recipeId }, share);
+      have.add(key);
+      out.meals++;
+    } catch { /* a meal with a bad date is skipped */ }
+  }
+  res.json(out);
+}));
+
+const exch = new Map();
+const exchFor = (user) => { if (!exch.has(user.id)) exch.set(user.id, new X.ExchangeJob()); return exch.get(user.id); };
+const mealieClient = (req) => {
+  // Only admins may point Simmer at a server on the home network; everyone else follows the public-address rule.
+  try { return new X.MealieClient(str(req.body?.url, 500), str(req.body?.token, 2000), { allowPrivate: cfg.allowPrivate || !!req.user.admin }); } catch (e) { throw fail(400, e.message); }
+};
+app.post('/api/exchange/mealie/import', need, wrap((req, res) => {
+  const client = mealieClient(req), user = req.user, share = shareOf(user);
+  exchFor(user).start('mealie-import', (progress, state) => X.importFromMealie(client, {
+    progress, state,
+    upsert: (data, photo) => { const r = upsertImported(data, photo, user.id, share); if (data.collections?.length) { const u = acc.user(user.id); u.collections = cleanCollections([...(u.collections || []), ...data.collections]); acc.save(); } return r; },
+  }));
+  res.status(202).json({ started: true });
+}));
+app.post('/api/exchange/mealie/export', need, wrap((req, res) => {
+  const client = mealieClient(req), mine = recipesFor(req);
+  exchFor(req.user).start('mealie-export', (progress, state) => X.exportToMealie(client, mine, { progress, state }));
+  res.status(202).json({ started: true });
+}));
+app.get('/api/exchange/status', need, (req, res) => res.json(exchFor(req.user).status()));
 
 /* ---------- recipe collections: ordered per person, renamed or removed across their recipes ---------- */
 const myRecipes = (req) => store.list().filter((r) => r.owner === me(req));

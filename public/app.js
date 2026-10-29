@@ -416,8 +416,10 @@ async function importView() {
       <div id="prog" hidden></div>
     </div>
     <p class="muted" style="max-width:540px">${t('import.note')}</p>
-    <div class="panel" id="photos" style="margin-top:18px"></div>`;
+    <div class="panel" id="photos" style="margin-top:18px"></div>
+    <h1 class="rtitle" style="margin-top:28px">${t('xch.title')}</h1><div id="exch"></div>`;
   photoCard();
+  S.exchangePanel($('#exch'));
   const prog = $('#prog'), form = $('#al'), go = $('#go');
   const draw = (stt) => {
     if (stt.state === 'idle') return;

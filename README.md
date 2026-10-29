@@ -72,6 +72,22 @@ docker compose up -d --build
 - **List items**: tap a line to cross it off, tap the pencil to edit.
 - **Shared meals** show everyone invited, across households, in each person's own meal plan.
 
+## Export and import with other apps
+
+Open **Import & export** (top bar, or Account). Everything is yours to take with you:
+
+| Export | Format | Opens in |
+| --- | --- | --- |
+| Simmer backup | `.zip` (recipes, photos, collections, lists, meal plan) | Simmer (Import a file) |
+| Paprika file | `.paprikarecipes` | Paprika, Mealie, Tandoor, RecipeSage |
+| Recipe folders | `.zip`, one folder per recipe (schema.org JSON + photo) | Mealie, Tandoor, Nextcloud Cookbook |
+| Shopping lists | `.csv` | any spreadsheet |
+| Meal plan | `.ics` | Apple, Google, Home Assistant calendars |
+
+**Import a file** reads a Simmer backup, Paprika, a Mealie export zip, a cookbook zip or a recipe `.json` (schema.org). Importing again updates instead of duplicating.
+
+**Mealie, live:** enter your Mealie address and an API token (Mealie profile, API tokens) to copy recipes either way. The token is used for that transfer only and never stored. Recipes already in Mealie (same name) are skipped when sending. Admins may use a LAN address like `http://192.168.1.20:9925`.
+
 ## Home Assistant
 1. In Simmer: **Account → API tokens → Create token** and copy it (shown once).
 2. In HACS: ⋮ → **Custom repositories** → add `https://github.com/moimeme81/simmer` as type *Integration*, then install **Simmer**
