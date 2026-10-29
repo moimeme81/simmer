@@ -355,3 +355,13 @@ test('web photo search: results from an Openverse-style server, and picking one 
     assert.equal((await chris.put(`/api/recipes/${rid}/image`, { image: PNG })).json.imageCredit, undefined);
   } finally { delete process.env.IMAGE_SEARCH_URL; fake.close(); }
 });
+
+test('the page revalidates and script URLs are fingerprinted so caches cannot serve an old version', async () => {
+  const page = await fetch(base + '/');
+  assert.match(page.headers.get('cache-control'), /no-cache/);
+  const html = await page.text();
+  assert.match(html, /<script src="app\.js\?v=[0-9a-f]{10}"><\/script>/);
+  assert.match(html, /href="app\.css\?v=[0-9a-f]{10}"/);
+  const js = await fetch(base + '/app.js?v=anything');
+  assert.equal(js.status, 200); assert.match(js.headers.get('cache-control'), /no-cache/);
+});

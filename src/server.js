@@ -1,4 +1,5 @@
 'use strict';
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const express = require('express');
@@ -509,7 +510,19 @@ app.get('/api/ha/summary', (req, res) => {
 });
 
 app.use('/images', need, express.static(store.imageDir, { maxAge: '30d', immutable: true }));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+/* The page and its scripts always revalidate, and each script URL carries a fingerprint of the files, so a proxy
+ * or browser cache (Nginx Proxy Manager's "Cache assets", for instance) can never keep serving an old version. */
+const PUBLIC = path.join(__dirname, '..', 'public');
+const assetVersion = () => {
+  const h = crypto.createHash('sha1');
+  for (const f of fs.readdirSync(PUBLIC).filter((x) => /\.(js|css)$/.test(x)).sort()) h.update(f + fs.statSync(path.join(PUBLIC, f)).mtimeMs + fs.statSync(path.join(PUBLIC, f)).size);
+  return h.digest('hex').slice(0, 10);
+};
+const ASSET_V = assetVersion();
+const indexHtml = () => fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8').replace(/(src|href)="([\w.-]+\.(?:js|css))"/g, `$1="$2?v=${ASSET_V}"`);
+const sendIndex = (_req, res) => res.set('Cache-Control', 'no-cache').type('html').send(indexHtml());
+app.get(['/', '/index.html'], sendIndex);
+app.use(express.static(PUBLIC, { setHeaders: (res, file) => { if (/\.(js|css|html)$/.test(file)) res.set('Cache-Control', 'no-cache'); } }));
 app.use((err, _req, res, _next) => res.status(err.status || 500).json({ error: err.message }));
 
 if (require.main === module) {
