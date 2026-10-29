@@ -38,17 +38,37 @@ async function commons(q) {
   }).filter((r) => r && r.url && r.thumb && /\.(jpe?g|png|webp)$/i.test(r.url));
 }
 
-/** Returns { results, errors }. A source that fails is skipped; only if all fail does the caller see an error. */
+/** Wordings to try, most specific first: "Pork Osso Buco" -> "Osso Buco" -> "Buco". */
+function variants(q) {
+  const stop = /^(the|a|an|and|with|of|in|easy|best|simple|quick|homemade|recipe|style|my|our)$/i;
+  const words = q.split(/\s+/).filter((w) => w && !stop.test(w));
+  const out = [q];
+  for (const v of [words.join(' '), words.slice(-2).join(' '), words.slice(-1).join(' ')]) if (v && v.length > 2 && !out.some((o) => o.toLowerCase() === v.toLowerCase())) out.push(v);
+  return out.slice(0, 4);
+}
+
+/** Runs one source over the wordings until one finds photos. Throws only when the source itself could not be reached. */
+async function trySource(fn, q) {
+  let failure = null;
+  for (const v of variants(q)) {
+    try { const r = await fn(v); if (r.length) return r; }
+    catch (e) { failure = e; if (/timed out|ENOTFOUND|EAI_AGAIN|ECONN/.test(String(e.message))) break; }   // unreachable: don't retry
+  }
+  if (failure) throw failure;
+  return [];
+}
+
+/** Returns { results, errors, reached }. `reached` = how many sources answered (even with zero photos). */
 async function searchImages(q) {
   const query = String(q || '').trim().slice(0, 120);
-  if (!query) return { results: [], errors: [] };
+  if (!query) return { results: [], errors: [], reached: 0 };
   const jobs = process.env.IMAGE_SEARCH_URL ? [openverse] : [openverse, commons];
-  const settled = await Promise.allSettled(jobs.map((f) => f(query)));
+  const settled = await Promise.allSettled(jobs.map((f) => trySource(f, query)));
   const results = [], seen = new Set();
   const max = Math.max(...settled.map((s) => (s.status === 'fulfilled' ? s.value.length : 0)), 0);
   for (let n = 0; n < max; n++) for (const s of settled) { const r = s.status === 'fulfilled' && s.value[n]; if (r && !seen.has(r.url)) { seen.add(r.url); results.push(r); } }
   const names = process.env.IMAGE_SEARCH_URL ? ['Custom'] : ['Openverse', 'Wikimedia Commons'];
-  return { results, errors: settled.map((s, n) => (s.status === 'rejected' ? `${names[n]}: ${String(s.reason?.message || s.reason)}` : null)).filter(Boolean) };
+  return { results, reached: settled.filter((s) => s.status === 'fulfilled').length, errors: settled.map((s, n) => (s.status === 'rejected' ? `${names[n]}: ${String(s.reason?.message || s.reason)}` : null)).filter(Boolean) };
 }
 
 module.exports = { searchImages };

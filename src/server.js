@@ -204,8 +204,9 @@ let lastSearch = 0;
 app.get('/api/image-search', wrap(async (req, res) => {
   if (Date.now() - lastSearch < 400) throw fail(429, 'Too many searches. Wait a moment and try again.');
   lastSearch = Date.now();
-  const { results, errors } = await searchImages(str(req.query.q, 120));
-  if (!results.length && errors.length) { console.warn('[image-search]', errors.join(' | ')); throw fail(502, `Simmer could not reach the image search (${errors.join('; ')}). Check the server’s internet connection and DNS.`); }
+  const { results, errors, reached } = await searchImages(str(req.query.q, 120));
+  if (errors.length) console.warn('[image-search]', errors.join(' | '));
+  if (!results.length && !reached) { console.warn('[image-search]', errors.join(' | ')); throw fail(502, `Simmer could not reach the image search (${errors.join('; ')}). Check the server’s internet connection and DNS.`); }
   res.json({ results });
 }));
 app.post('/api/recipes/:id/image-from-url', wrap(async (req, res) => {
