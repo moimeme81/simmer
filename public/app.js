@@ -265,7 +265,10 @@ async function recipe(id, opts = {}) {
   $('#findPhoto')?.addEventListener('click', async (e) => {
     const b = e.target; b.disabled = true; b.textContent = t('photo.finding'); $('#fpErr').hidden = true;
     try { await S.post(`/api/recipes/${id}/find-photo`); recipe(id, opts); }
-    catch (x) { b.disabled = false; b.textContent = t('photo.find'); $('#fpErr').textContent = x.message; $('#fpErr').hidden = false; }
+    catch (x) {
+      b.disabled = false; b.textContent = t('photo.find'); $('#fpErr').textContent = x.message; $('#fpErr').hidden = false;
+      $('#webPhoto')?.click();   // the source site would not give a picture: search the web instead
+    }
   });
 
   /* Start cooking: full screen or on this page, whichever the person chose in their account. */
