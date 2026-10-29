@@ -254,5 +254,141 @@
     return Number.isFinite(v) && v > 0 ? v : null;
   }
 
-  return { scaleLine, parseYield, scan, toNumber };
+  /* ---------- unit conversion ---------- */
+  // Cooking-friendly equivalents (Canadian/metric kitchen sizes): 1 cup = 250 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml.
+  const BASE = { tsp: 5, tbsp: 15, cup: 250, floz: 30, pint: 500, quart: 1000, gallon: 4000, ml: 1, cl: 10, dl: 100, l: 1000, mg: 0.001, g: 1, kg: 1000, oz: 28.35, lb: 453.6, mm: 1, cm: 10, in: 25.4 };
+  const nearestOf = (v, steps) => { let best = steps[0]; for (const x of steps) if (Math.abs(x - v) < Math.abs(best - v) - 1e-9) best = x; return best; };
+  const grid = (v, parts, max) => { const w = Math.floor(v); const r = nearestOf(v - w, parts); return Math.min(max, w + r); };
+  const EIGHTHS = [0, 1 / 8, 1 / 4, 1 / 3, 3 / 8, 1 / 2, 5 / 8, 2 / 3, 3 / 4, 7 / 8, 1];
+  const QUARTERS = [0, 1 / 4, 1 / 3, 1 / 2, 2 / 3, 3 / 4, 1];
+  const HALVES = [0, 1 / 2, 1];
+  const roundTo = (v, id) => {
+    if (id === 'cup') return v < 1 ? grid(v, EIGHTHS, 99) : grid(v, QUARTERS, 9999);
+    if (id === 'tbsp') return v < 3 ? grid(v, HALVES, 99) : Math.round(v);
+    if (id === 'tsp') return v < 1 ? grid(v, EIGHTHS.filter((x) => [0, 1 / 8, 1 / 4, 1 / 2, 3 / 4, 1].includes(x)), 99) : grid(v, QUARTERS, 99);
+    if (id === 'oz') return v < 4 ? grid(v, QUARTERS, 99) : Math.round(v * 2) / 2;
+    if (id === 'lb') return grid(v, QUARTERS, 9999);
+    if (id === 'in') return v < 1 ? grid(v, EIGHTHS, 99) : grid(v, QUARTERS, 9999);
+    if (id === 'ml' || id === 'g') return v >= 100 ? Math.round(v / 10) * 10 : v >= 20 ? Math.round(v / 5) * 5 : v >= 5 ? Math.round(v * 2) / 2 : Math.round(v * 4) / 4;
+    return v;
+  };
+  // pick a sensible unit in the wanted system for an amount of `base` (ml, g or mm)
+  function toSystem(base, dim, sys) {
+    if (dim === 'vol') {
+      if (sys === 'met') return base >= 1000 ? { id: 'l', v: base / 1000 } : { id: 'ml', v: base };
+      if (base < 15 * 0.9) return { id: 'tsp', v: base / 5 };
+      if (base < 60) return { id: 'tbsp', v: base / 15 };
+      return { id: 'cup', v: base / 250 };
+    }
+    if (dim === 'mass') {
+      if (sys === 'met') return base >= 1000 ? { id: 'kg', v: base / 1000 } : { id: 'g', v: base };
+      return base >= 454 * 0.9 ? { id: 'lb', v: base / 453.6 } : { id: 'oz', v: base / 28.35 };
+    }
+    if (sys === 'met') return base >= 10 ? { id: 'cm', v: base / 10 } : { id: 'mm', v: base };
+    return { id: 'in', v: base / 25.4 };
+  }
+  const UNIT_ONE = {
+    en: { tsp: 'tsp', tbsp: 'tbsp', cup: 'cup', oz: 'oz', lb: 'lb', in: 'inch', ml: 'ml', l: 'L', g: 'g', kg: 'kg', mm: 'mm', cm: 'cm' },
+    fr: { tsp: 'c. à thé', tbsp: 'c. à soupe', cup: 'tasse', oz: 'oz', lb: 'lb', in: 'po', ml: 'ml', l: 'L', g: 'g', kg: 'kg', mm: 'mm', cm: 'cm' },
+  };
+  const DIM_KEY = { vol: 'vol', mass: 'mass', len: 'len' };
+
+  function convertAmount(numText, unit, sys, l) {
+    const range = numText.match(RANGE_RE);
+    const parts = range ? [toNumber(range[1]), toNumber(range[3])] : [toNumber(numText)];
+    if (parts.some((x) => !Number.isFinite(x))) return null;
+    const bases = parts.map((x) => x * BASE[unit.id]);
+    const target = toSystem(Math.max(...bases), unit.dim, sys);
+    const tu = byId[target.id];
+    const vals = bases.map((b) => roundTo(b / BASE[target.id], target.id));
+    const fmt = (v) => (target.id === 'in' || target.id === 'cup' || target.id === 'tbsp' || target.id === 'tsp' || target.id === 'oz' || target.id === 'lb' ? format(v, { ...tu, sys: 'imp' }, l) : format(v, tu, l));
+    const text = range ? `${fmt(vals[0])}${range[2]}${fmt(vals[1])}` : fmt(vals[0]);
+    const last = vals[vals.length - 1];
+    const name = UNIT_ONE[l][target.id];
+    const word = ['cup', 'inch', 'tasse', 'po'].includes(name) ? pluralize(name, last) : name;
+    return `${text} ${word}`;
+  }
+
+  const GAP_PAIR = /^\s*(?:[/|]|ou|or)\s*$/i;
+  /** Converts the measurements in one line (ingredient or step) as the settings say. prefs: { mass, vol, len, temp } each 'orig' | 'metric' | 'imperial' | 'both'. */
+  function convertLine(line, prefs, opts) {
+    if (!line || !prefs) return line;
+    const l = isFrenchLine(line) ? 'fr' : (opts?.lang === 'fr' && !/[a-z]{4,}/i.test(line.replace(/\b(?:tsp|tbsp|cups?|oz|lbs?|ml)\b/gi, '')) ? 'fr' : 'en');
+    let out = line;
+    // --- quantities ---
+    const items = scan(out).filter((f) => f.unit && DIM_KEY[f.unit.dim] && !f.noScale);
+    const edits = [];
+    const used = new Set();
+    for (const a of items) {
+      if (used.has(a)) continue;
+      const mode = prefs[DIM_KEY[a.unit.dim]] || 'orig';
+      if (mode === 'orig') continue;
+      const sysA = a.unit.sys;
+      // an amount already written in both systems: "1 cup (250 ml)" or "1 cup / 250 ml"
+      const b = items.find((o) => o !== a && !used.has(o) && o.unit.dim === a.unit.dim && o.unit.sys !== sysA && o.index > a.end && (
+        (o.paren && o.paren.start >= a.end && /^\s*$/.test(out.slice(a.end, o.paren.start)) && out.slice(o.paren.start + 1, o.paren.end).trim() === out.slice(o.index, o.end).trim()) ||
+        (!o.paren && GAP_PAIR.test(out.slice(a.end, o.index)))));
+      if (b) {
+        used.add(a); used.add(b);
+        if (mode === 'both') continue;
+        const keep = (mode === 'metric') === (sysA === 'met') ? a : b;
+        edits.push({ start: a.index, end: b.paren ? b.paren.end + 1 : b.end, text: out.slice(keep.index, keep.end) });
+        continue;
+      }
+      if (mode === 'both') {
+        const conv = convertAmount(a.numText, a.unit, sysA === 'met' ? 'imp' : 'met', l);
+        if (conv) edits.push({ start: a.end, end: a.end, text: a.paren ? ` / ${conv}` : ` (${conv})` });
+        continue;
+      }
+      if ((mode === 'metric') === (sysA === 'met')) continue;   // already in the wanted system
+      const conv = convertAmount(a.numText, a.unit, mode === 'metric' ? 'met' : 'imp', l);
+      if (conv) edits.push({ start: a.index, end: a.end, text: conv });
+    }
+    edits.sort((x, y) => y.start - x.start).forEach((e) => { out = out.slice(0, e.start) + e.text + out.slice(e.end); });
+
+    // --- temperatures ---
+    const tmode = prefs.temp || 'orig';
+    if (tmode !== 'orig') out = convertTemps(out, tmode, l);
+    return out;
+  }
+
+  /* ---------- temperatures ---------- */
+  const OVEN_F2C = { 200: 95, 225: 110, 250: 120, 275: 140, 300: 150, 325: 160, 350: 175, 375: 190, 400: 200, 425: 220, 450: 230, 475: 240, 500: 260 };
+  const OVEN_C2F = { 95: 200, 110: 225, 120: 250, 140: 275, 150: 300, 160: 325, 175: 350, 180: 350, 190: 375, 200: 400, 220: 425, 230: 450, 240: 475, 260: 500 };
+  const f2c = (f) => OVEN_F2C[f] ?? Math.round(((f - 32) * 5) / 9 / 5) * 5;
+  const c2f = (c) => OVEN_C2F[c] ?? (c >= 120 ? Math.round((c * 1.8 + 32) / 25) * 25 : Math.round((c * 1.8 + 32) / 5) * 5);
+  const TEMP_RE = /(?<![\d.,])(\d{2,3})(?:(\s*(?:-|–|à|to)\s*)(\d{2,3}))?\s*(?:(?:°|º|˚)\s*|\s+degrees?\s*|\s+degrés?\s*)([CF])(?![\p{L}\d])|(?<![\d.,])(\d{3})(?:(\s*(?:-|–|à|to)\s*)(\d{3}))?\s?(F)(?![\p{L}\d])/giu;
+
+  function convertTemps(str, mode, l) {
+    const toks = [];
+    TEMP_RE.lastIndex = 0;
+    let m;
+    while ((m = TEMP_RE.exec(str))) {
+      const a = +(m[1] || m[5]), sep = m[2] || m[6] || '', b = m[3] || m[7] ? +(m[3] || m[7]) : null, u = (m[4] || m[8]).toUpperCase();
+      toks.push({ i: m.index, e: m.index + m[0].length, a, sep, b, u });
+    }
+    const show = (a, sep, b, u) => `${a}${b != null ? sep + b : ''}${l === 'fr' ? ' ' : ''}°${u}`;
+    const conv = (t) => { const to = t.u === 'F' ? 'C' : 'F', fn = t.u === 'F' ? f2c : c2f; return { text: show(fn(t.a), t.sep, t.b != null ? fn(t.b) : null, to), u: to }; };
+    const edits = [];
+    for (let n = 0; n < toks.length; n++) {
+      const t = toks[n], nx = toks[n + 1];
+      const gap = nx ? str.slice(t.e, nx.i) : '';
+      const paired = nx && nx.u !== t.u && (GAP_PAIR.test(gap) || /^\s*\(\s*$/.test(gap));
+      if (paired) {
+        n++;
+        if (mode === 'both') continue;
+        const keep = (mode === 'metric') === (t.u === 'C') ? t : nx;
+        const end = /^\s*\(\s*$/.test(gap) && str[nx.e] === ')' ? nx.e + 1 : nx.e;
+        edits.push({ start: t.i, end, text: str.slice(keep.i, keep.e) });
+        continue;
+      }
+      if (mode === 'both') edits.push({ start: t.e, end: t.e, text: ` (${conv(t).text})` });
+      else if ((mode === 'metric') === (t.u === 'F')) edits.push({ start: t.i, end: t.e, text: conv(t).text });
+    }
+    edits.sort((x, y) => y.start - x.start).forEach((e) => { str = str.slice(0, e.start) + e.text + str.slice(e.end); });
+    return str;
+  }
+
+  return { scaleLine, convertLine, parseYield, scan, toNumber };
+
 });

@@ -24,6 +24,12 @@ function checkPassword(user, password) {
 }
 const cleanUsername = (s) => String(s || '').trim().toLowerCase();
 
+/** How a user wants measurements shown: per kind, 'orig' (as written) | 'metric' | 'imperial' | 'both'. */
+function cleanUnits(u) {
+  const ok = (v) => (['orig', 'metric', 'imperial', 'both'].includes(v) ? v : 'orig');
+  return { mass: ok(u?.mass), vol: ok(u?.vol), len: ok(u?.len), temp: ok(u?.temp) };
+}
+
 class Accounts {
   constructor(dataDir) {
     this.file = path.join(dataDir, 'accounts.json');
@@ -43,7 +49,7 @@ class Accounts {
   avatarUrl(u) { return u?.av ? `/avatars/${u.id}?v=${u.av}` : null; }
   setAvatar(id, version) { const u = this.user(id); if (u) { u.av = version; this.save(); } }
   publicUser(u) {
-    return u && { id: u.id, name: u.name, username: u.username, avatar: this.avatarUrl(u), admin: !!u.admin, lang: u.lang || null, cookStyle: u.cookStyle === 'page' ? 'page' : 'focus', collections: u.collections || [], autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id) };
+    return u && { id: u.id, name: u.name, username: u.username, avatar: this.avatarUrl(u), admin: !!u.admin, lang: u.lang || null, cookStyle: u.cookStyle === 'page' ? 'page' : 'focus', units: cleanUnits(u.units), collections: u.collections || [], autoShare: u.autoShare || [], households: this.householdsOf(u.id).map((h) => h.id) };
   }
   people() { return this.db.users.map((u) => ({ id: u.id, name: u.name, avatar: this.avatarUrl(u) })); }
   user(id) { return this.db.users.find((u) => u.id === id) || null; }
@@ -70,6 +76,7 @@ class Accounts {
     if (b.name != null && String(b.name).trim()) u.name = String(b.name).trim().slice(0, 60);
     if (b.lang === 'fr' || b.lang === 'en') u.lang = b.lang;
     if (b.cookStyle === 'focus' || b.cookStyle === 'page') u.cookStyle = b.cookStyle;
+    if (b.units && typeof b.units === 'object') u.units = cleanUnits({ ...cleanUnits(u.units), ...b.units });
     if (Array.isArray(b.autoShare)) {
       const mine = new Set(this.householdsOf(userId).map((h) => h.id));
       u.autoShare = b.autoShare.filter((id) => mine.has(id));

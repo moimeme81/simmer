@@ -356,6 +356,15 @@ test('web photo search: results from an Openverse-style server, and picking one 
   } finally { delete process.env.IMAGE_SEARCH_URL; fake.close(); }
 });
 
+test('measurement settings are saved per user, one kind at a time, and bad values are ignored', async () => {
+  const me = (await chris.get('/api/me')).json;
+  assert.deepEqual(me.units, { mass: 'orig', vol: 'orig', len: 'orig', temp: 'orig' });
+  let r = (await chris.put('/api/me', { units: { mass: 'metric', temp: 'imperial' } })).json;
+  assert.deepEqual(r.units, { mass: 'metric', vol: 'orig', len: 'orig', temp: 'imperial' });
+  r = (await chris.put('/api/me', { units: { vol: 'both', mass: 'nonsense' } })).json;
+  assert.deepEqual(r.units, { mass: 'orig', vol: 'both', len: 'orig', temp: 'imperial' });
+});
+
 test('the page revalidates and script URLs are fingerprinted so caches cannot serve an old version', async () => {
   const page = await fetch(base + '/');
   assert.match(page.headers.get('cache-control'), /no-cache/);

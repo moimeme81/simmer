@@ -88,6 +88,9 @@ h2.sec{font-size:22px;font-weight:650;margin:0 0 10px}
 .scaler b{margin-right:auto;font-weight:700}
 .scaler .step{width:44px;padding:0;font-size:24px;line-height:1;border-radius:50%}
 .scaler .val{min-width:2.4ch;text-align:center;font:700 26px var(--display)}
+.unitbox{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:-4px 0 12px}
+.unitbox small{margin-right:4px}
+.unitbox .mult{min-height:36px;padding:0 12px;font-size:14px}
 .scaler small{color:var(--mute);flex-basis:100%}
 .scaler .mult.on{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 ul.ing{list-style:none;margin:0;padding:0}

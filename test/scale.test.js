@@ -59,3 +59,43 @@ test('yield parsing', () => {
   assert.equal(parseYield('plusieurs'), null);
 });
 test('yield scaling', () => assert.equal(scaleLine('4 portions', 2, { lang: 'fr' }), '8 portions'));
+
+/* ---------- unit conversion ---------- */
+const { convertLine } = require('../public/scale');
+const P = (o) => ({ mass: 'orig', vol: 'orig', len: 'orig', temp: 'orig', ...o });
+
+test('convertLine: each kind of measurement follows its own setting', () => {
+  const line = '2 lb pork, 1 cup (250 ml) wine, then bake at 350°F';
+  assert.equal(convertLine(line, P({ mass: 'metric' })), '910 g pork, 1 cup (250 ml) wine, then bake at 350°F');
+  assert.equal(convertLine(line, P({ vol: 'metric' })), '2 lb pork, 250 ml wine, then bake at 350°F');
+  assert.equal(convertLine(line, P({ temp: 'metric' })), '2 lb pork, 1 cup (250 ml) wine, then bake at 175°C');
+  assert.equal(convertLine(line, P({ mass: 'metric', vol: 'metric', temp: 'imperial' })), '910 g pork, 250 ml wine, then bake at 350°F');
+  assert.equal(convertLine(line, P()), line, 'as written changes nothing');
+});
+
+test('convertLine: converts both ways and shows both when asked', () => {
+  assert.equal(convertLine('500 g flour', P({ mass: 'imperial' })), '1 lb flour');
+  assert.equal(convertLine('500 g flour', P({ mass: 'both' })), '500 g (1 lb) flour');
+  assert.equal(convertLine('1 cup milk', P({ vol: 'metric' })), '250 ml milk');
+  assert.equal(convertLine('750 ml stock', P({ vol: 'imperial' })), '3 cups stock');
+  assert.equal(convertLine('3 tbsp honey, 2-3 cups water', P({ vol: 'metric' })), '45 ml honey, 500-750 ml water');
+  assert.equal(convertLine('cut 1 inch cubes', P({ len: 'metric' })), 'cut 2.5 cm cubes');
+});
+
+test('convertLine: amounts written in both systems keep just the chosen one', () => {
+  assert.equal(convertLine('1 tasse (250 ml) de lait', P({ vol: 'metric' })), '250 ml de lait');
+  assert.equal(convertLine('250 ml / 1 cup milk', P({ vol: 'imperial' })), '1 cup milk');
+  assert.equal(convertLine('1 cup (250 ml) milk', P({ vol: 'both' })), '1 cup (250 ml) milk');
+});
+
+test('convertLine: temperatures in steps, ranges, French, pairs', () => {
+  assert.equal(convertLine('Preheat to 350°F and cook to 165 °F', P({ temp: 'metric' })), 'Preheat to 175°C and cook to 75°C');
+  assert.equal(convertLine('Préchauffer à 180 °C', P({ temp: 'imperial' })), 'Préchauffer à 350 °F');
+  assert.equal(convertLine('Bake 375-400 F', P({ temp: 'metric' })), 'Bake 190-200°C');
+  assert.equal(convertLine('Bake at 350°F (175°C)', P({ temp: 'metric' })), 'Bake at 175°C');
+  assert.equal(convertLine('Bake at 350°F', P({ temp: 'both' })), 'Bake at 350°F (175°C)');
+});
+
+test('convertLine: leaves non-measurements alone', () => {
+  assert.equal(convertLine('2 % milk, 3 cloves garlic, cook 20 minutes', P({ mass: 'both', vol: 'both', len: 'both', temp: 'both' })), '2 % milk, 3 cloves garlic, cook 20 minutes');
+});

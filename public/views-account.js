@@ -67,6 +67,8 @@
               <div class="row"><button class="primary">${t('acct.save')}</button><button type="button" id="out" class="quiet">${t('auth.logout')}</button></div></form>
             <h2 class="sec" style="margin-top:22px">${t('cook.interface')}</h2>
             <form id="cs" class="stack">${[['focus', 'cook.focus'], ['page', 'cook.page']].map(([v, k]) => `<label class="pick"><input type="radio" name="cs" value="${v}" ${(me.cookStyle || 'focus') === v ? 'checked' : ''}><span>${t(k)}</span></label>`).join('')}</form>
+            <h2 class="sec" style="margin-top:22px">${t('units.title')}</h2>
+            <form id="un" class="stack"><p class="muted" style="margin:0">${t('units.help')}</p>${['mass', 'vol', 'len', 'temp'].map((k) => `<label for="un_${k}">${t('units.' + k)}</label><select id="un_${k}" data-k="${k}">${['orig', 'metric', 'imperial', 'both'].map((v) => `<option value="${v}" ${(me.units?.[k] || 'orig') === v ? 'selected' : ''}>${t('units.' + v)}</option>`).join('')}</select>`).join('')}</form>
             <h2 class="sec" style="margin-top:22px">${t('acct.password')}</h2>
             <form id="pw"><label for="pc">${t('acct.current')}</label><input id="pc" type="password" autocomplete="current-password" required>
               <label for="pnw">${t('acct.new')}</label><input id="pnw" type="password" autocomplete="new-password" minlength="8" required>
@@ -130,6 +132,7 @@
         try { await S.put('/api/me/avatar', { image: await S.squarePhoto(f) }); await reload(); S.chrome?.(); } catch (x) { flash($('#phm'), x.name === 'InvalidStateError' || !x.message ? t('acct.photoBad') : x.message, true); }
       };
       $('#phx')?.addEventListener('click', async () => { await S.del('/api/me/avatar'); await reload(); S.chrome?.(); });
+      $('#un').onchange = async () => { const units = {}; $('#un').querySelectorAll('select').forEach((x) => (units[x.dataset.k] = x.value)); await S.put('/api/me', { units }); await S.refreshMe(); Object.assign(me, S.me); };
       $('#cs').onchange = async (e) => { await S.put('/api/me', { cookStyle: e.target.value }); await S.refreshMe(); Object.assign(me, S.me); };
       $('#out').onclick = async () => { await S.post('/api/auth/logout'); S.boot(); };
       $('#pw').onsubmit = async (e) => {

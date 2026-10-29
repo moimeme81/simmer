@@ -183,7 +183,11 @@ async function recipe(id, opts = {}) {
   const page = (S.me?.cookStyle || 'focus') === 'page';
   let cookingHere = !!opts.cook && page;     // in "on the page" mode the page becomes the cooking screen
   const sc = (line) => Scale.scaleLine(line, factor, { lang });
-  const st = { r, sc: (l) => sc(l), checked };
+  let unitMode = null;   // null = my own measurement settings; otherwise 'orig' | 'metric' | 'imperial' | 'both' for this view only
+  const prefs = () => (unitMode ? { mass: unitMode, vol: unitMode, len: unitMode, temp: unitMode } : S.me?.units);
+  const cv = (line) => Scale.convertLine(line, prefs(), { lang });
+  const view = (line) => cv(sc(line));
+  const st = { r, sc: (l) => view(l), cv: (l) => cv(l), checked };
   const mealDate = forMeal ? S.dateLabel(S.parseYmd(forMeal.date), { weekday: 'short', month: 'short', day: 'numeric' }) : '';
   const facts = () => [[t('recipe.prep'), mins(r.prepMinutes)], [t('recipe.cook'), mins(r.cookMinutes)], [t('recipe.total'), mins(r.totalMinutes)], [t('recipe.serves'), r.yield ? sc(r.yield) : null]].filter((x) => x[1]);
 
@@ -198,18 +202,18 @@ async function recipe(id, opts = {}) {
     <div class="cta"><button class="primary" id="cookBtn"></button><button id="toList">${ic('basket')} ${t('recipe.toList')}</button><button id="toPlan">${ic('cal')} ${t('recipe.toPlan')}</button>${r.mine ? `<button id="editBtn">${ic('edit')} ${t('recipe.edit')}</button><button id="shareBtn">${ic('share')} ${t('share.button')}</button><button class="quiet" id="del">${t('recipe.delete')}</button>` : ''}</div>
     <p class="muted sharedline" id="sharedline">${esc(r.mine ? S.shareText(r) : t('recipe.guest', { name: r.ownerName }))}</p>
     <div class="rbody">
-      <aside><h2 class="sec">${t('recipe.ingredients')}</h2><div class="scaler" id="scaler"></div><ul class="ing" id="ing"></ul></aside>
+      <aside><h2 class="sec">${t('recipe.ingredients')}</h2><div class="scaler" id="scaler"></div><div class="unitbox" id="unitbox" role="group" aria-label="${esc(t('units.view'))}"></div><ul class="ing" id="ing"></ul></aside>
       <section><h2 class="sec">${t('recipe.method')}</h2><ol class="steps" id="steps"></ol>
         <h2 class="sec" style="margin-top:26px">${t('recipe.notes')}</h2><textarea id="notes" placeholder="${esc(t('recipe.notesPh'))}">${esc(r.notes)}</textarea></section>
     </div>`;
 
   const drawCook = () => {
     $('#cookBtn').innerHTML = cookingHere ? t('cook.finish') : t('recipe.cookBtn');
-    $('#steps').innerHTML = r.steps.map((s, n) => `<li>${cookingHere ? stepHTML(s, n + 1) : esc(s)}</li>`).join('');
+    $('#steps').innerHTML = r.steps.map((s, n) => `<li>${cookingHere ? stepHTML(cv(s), n + 1) : esc(cv(s))}</li>`).join('');
     $('#ing').classList.toggle('plain-ing', !cookingHere);
     $('#ing').innerHTML = r.ingredients.map((i, n) => cookingHere
-      ? `<li><label><input type="checkbox" data-n="${n}" ${checked.has(n) ? 'checked' : ''}><span>${esc(sc(i))}</span></label></li>`
-      : `<li><span>${esc(sc(i))}</span></li>`).join('');
+      ? `<li><label><input type="checkbox" data-n="${n}" ${checked.has(n) ? 'checked' : ''}><span>${esc(view(i))}</span></label></li>`
+      : `<li><span>${esc(view(i))}</span></li>`).join('');
     $('#ing').querySelectorAll('input').forEach((c) => (c.onchange = () => (c.checked ? checked.add(+c.dataset.n) : checked.delete(+c.dataset.n))));
   };
   const draw = () => {
@@ -217,6 +221,8 @@ async function recipe(id, opts = {}) {
     $('#facts').innerHTML = facts().map(([k, v]) => `<div class="fact"><span>${k}</span><b>${esc(v)}</b></div>`).join('') +
       (r.host || r.sourceUrl ? `<div class="src">${t('recipe.from')} ${r.sourceUrl ? `<a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(r.host)}</a>` : esc(r.host)}</div>` : '');
     drawCook();
+    $('#unitbox').innerHTML = `<small class="muted">${t('units.view')}</small>` + [[null, 'units.mine'], ['orig', 'units.orig'], ['metric', 'units.metric'], ['imperial', 'units.imperial'], ['both', 'units.both']].map(([v, k]) => `<button type="button" class="mult ${unitMode === v ? 'on' : ''}" data-u="${v || ''}">${t(k)}</button>`).join('');
+    $('#unitbox').querySelectorAll('button').forEach((b) => (b.onclick = () => { unitMode = b.dataset.u || null; draw(); }));
     const box = $('#scaler');
     if (base) {
       const shown = Number.isInteger(target) ? target : Math.round(target * 10) / 10;
@@ -301,7 +307,7 @@ async function recipe(id, opts = {}) {
         body.innerHTML = `<div class="row"><button class="quiet" data-back aria-label="${esc(t('recipe.backToLists'))}">${ic('back')}</button><h2 class="sec" style="margin:0">${S.listBadge(to, 28)} ${esc(S.listName(to))}</h2></div>
           <p class="muted" style="margin:8px 0">${esc(t('recipe.pickItems'))}${note ? ' · ' + esc(note) : ''}</p>
           <div class="row"><button type="button" class="quiet" data-all>${t('recipe.selectAll')}</button><button type="button" class="quiet" data-none>${t('recipe.selectNone')}</button></div>
-          <ul class="ing pickings">${r.ingredients.map((i, n) => `<li><label><input type="checkbox" data-n="${n}"><span>${esc(sc(i))}</span></label>${added[n]?.length ? `<small class="chip soft">✓ ${esc(added[n].join(', '))}</small>` : ''}</li>`).join('')}</ul>
+          <ul class="ing pickings">${r.ingredients.map((i, n) => `<li><label><input type="checkbox" data-n="${n}"><span>${esc(view(i))}</span></label>${added[n]?.length ? `<small class="chip soft">✓ ${esc(added[n].join(', '))}</small>` : ''}</li>`).join('')}</ul>
           <div class="row end" style="margin-top:12px"><button class="primary" id="addN" disabled></button></div>`;
         const boxes = [...body.querySelectorAll('input[type=checkbox]')];
         const sync = () => { const n = boxes.filter((c) => c.checked).length; const b = $('#addN', body); b.disabled = !n; b.textContent = t('recipe.addN', { n, list: S.listName(to) }); };
@@ -312,7 +318,7 @@ async function recipe(id, opts = {}) {
         $('#addN', body).onclick = async () => {
           const picked = boxes.filter((c) => c.checked).map((c) => +c.dataset.n);
           $('#addN', body).disabled = true;
-          const fresh = await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: picked.map((n) => sc(r.ingredients[n])), note } });
+          const fresh = await api(`/api/recipes/${id}/to-list`, { method: 'POST', body: { listId: to.id, ingredients: picked.map((n) => view(r.ingredients[n])), note } });
           lists[lists.findIndex((l) => l.id === to.id)] = fresh;
           for (const n of picked) (added[n] = added[n] || []).push(S.listName(to));
           justAdded = t('recipe.added', { n: picked.length, list: S.listName(to) });
@@ -332,7 +338,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && do
 
 function cook(st) {
   const el = $('#cook');
-  const steps = st.r.steps.length ? st.r.steps : [''];
+  const steps = st.r.steps.length ? st.r.steps.map((x) => st.cv(x)) : [''];
   const rid = st.r.id, resumed = sessions.read()[rid];
   let i = Math.min(Math.max(0, resumed?.step || 0), steps.length - 1), ingOpen = false, panel = false;
   curTitle = st.r.title;
