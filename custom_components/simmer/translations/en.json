@@ -4,10 +4,240 @@
       "user": {
         "title": "Connect to Simmer",
         "description": "Enter the address of your Simmer server and an API token. Create the token on Simmer's Account page.",
-        "data": { "url": "Address (for example http://192.168.1.10:3000)", "token": "API token" }
+        "data": {
+          "url": "Address (for example http://192.168.1.10:3000)",
+          "token": "API token"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Simmer needs a new token",
+        "description": "Simmer refused the saved token. Create a new one on Simmer's Account page.",
+        "data": {
+          "token": "API token"
+        }
       }
     },
-    "error": { "cannot_connect": "Could not reach Simmer at that address.", "invalid_auth": "Simmer refused that token." },
-    "abort": { "already_configured": "This Simmer account is already connected." }
+    "error": {
+      "cannot_connect": "Could not reach Simmer at that address.",
+      "invalid_auth": "Simmer refused that token."
+    },
+    "abort": {
+      "already_configured": "This Simmer account is already connected.",
+      "reauth_successful": "The new token works."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Simmer in the sidebar",
+        "description": "Show Simmer inside Home Assistant as a sidebar entry. If Home Assistant uses https, the address must be https too (for example your https Simmer address), or the browser will block it.",
+        "data": {
+          "show_panel": "Show Simmer in the sidebar",
+          "panel_url": "Address to open (leave empty to use the connection address)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "slot": {
+      "options": {
+        "breakfast": "Breakfast",
+        "lunch": "Lunch",
+        "dinner": "Dinner",
+        "snack": "Snack"
+      }
+    }
+  },
+  "services": {
+    "search_recipes": {
+      "name": "Search recipes",
+      "description": "Find recipes by name, ingredient or collection.",
+      "fields": {
+        "query": {
+          "name": "Search words",
+          "description": "Words from the name, ingredients or collection."
+        },
+        "collection": {
+          "name": "Collection",
+          "description": "Only recipes in this collection."
+        },
+        "limit": {
+          "name": "Maximum results",
+          "description": "How many recipes to return."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "get_recipe": {
+      "name": "Get recipe",
+      "description": "Return a recipe with its ingredients and steps.",
+      "fields": {
+        "recipe": {
+          "name": "Recipe",
+          "description": "Words from the recipe name; the best match is used."
+        },
+        "recipe_id": {
+          "name": "Recipe id",
+          "description": "Use instead of the name when you know the exact recipe."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "random_recipe": {
+      "name": "Random recipe",
+      "description": "Pick a random recipe, optionally from one collection.",
+      "fields": {
+        "collection": {
+          "name": "Collection",
+          "description": "Only recipes in this collection."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "import_recipe": {
+      "name": "Import recipe",
+      "description": "Add a recipe from a web page.",
+      "fields": {
+        "url": {
+          "name": "Address",
+          "description": "The web address of the recipe page."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "add_to_meal_plan": {
+      "name": "Add to meal plan",
+      "description": "Plan a recipe, or a free-text meal, on a day.",
+      "fields": {
+        "recipe": {
+          "name": "Recipe",
+          "description": "Words from the recipe name; the best match is used."
+        },
+        "title": {
+          "name": "Name",
+          "description": "A meal without a recipe, for example “Leftovers”."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Defaults to today."
+        },
+        "slot": {
+          "name": "Meal",
+          "description": "Which meal of the day. Defaults to dinner."
+        },
+        "servings": {
+          "name": "Servings",
+          "description": "How many servings."
+        },
+        "note": {
+          "name": "Note",
+          "description": "A note for the meal."
+        },
+        "recipe_id": {
+          "name": "Recipe id",
+          "description": "Use instead of the name when you know the exact recipe."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "set_random_meal": {
+      "name": "Plan a random meal",
+      "description": "Fill a meal with a random recipe.",
+      "fields": {
+        "date": {
+          "name": "Date",
+          "description": "Defaults to today."
+        },
+        "slot": {
+          "name": "Meal",
+          "description": "Which meal of the day. Defaults to dinner."
+        },
+        "collection": {
+          "name": "Collection",
+          "description": "Only recipes in this collection."
+        },
+        "servings": {
+          "name": "Servings",
+          "description": "How many servings."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "get_meal_plan": {
+      "name": "Get meal plan",
+      "description": "Return the meals planned between two days.",
+      "fields": {
+        "start_date": {
+          "name": "From",
+          "description": "First day. Defaults to today."
+        },
+        "end_date": {
+          "name": "To",
+          "description": "Last day. Defaults to six days after the first."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "remove_meal": {
+      "name": "Remove meal",
+      "description": "Take a meal off the plan.",
+      "fields": {
+        "meal_id": {
+          "name": "Meal id",
+          "description": "The id from Get meal plan."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    },
+    "add_recipe_to_list": {
+      "name": "Add recipe to list",
+      "description": "Put a recipe’s ingredients on a shopping list, scaled to the servings you want.",
+      "fields": {
+        "recipe": {
+          "name": "Recipe",
+          "description": "Words from the recipe name; the best match is used."
+        },
+        "list": {
+          "name": "List",
+          "description": "The name of the shopping list. Defaults to your first list."
+        },
+        "servings": {
+          "name": "Servings",
+          "description": "How many servings."
+        },
+        "recipe_id": {
+          "name": "Recipe id",
+          "description": "Use instead of the name when you know the exact recipe."
+        },
+        "config_entry_id": {
+          "name": "Simmer account",
+          "description": "Only needed if more than one Simmer account is connected."
+        }
+      }
+    }
   }
 }

@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import SimmerCoordinator
+from .coordinator import SimmerCoordinator, device_info
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -40,6 +40,7 @@ class SimmerTodoList(CoordinatorEntity[SimmerCoordinator], TodoListEntity):
 
     def __init__(self, coordinator: SimmerCoordinator, list_id: str) -> None:
         super().__init__(coordinator)
+        self._attr_device_info = device_info(coordinator)
         self.list_id = list_id
         self._attr_unique_id = f"{DOMAIN}_list_{list_id}"
 

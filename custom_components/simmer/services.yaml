@@ -1,0 +1,52 @@
+search_recipes:
+  fields:
+    query: { example: "chicken", selector: { text: } }
+    collection: { example: "Soups", selector: { text: } }
+    limit: { default: 10, selector: { number: { min: 1, max: 100, mode: box } } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+get_recipe:
+  fields:
+    recipe: { example: "osso buco", selector: { text: } }
+    recipe_id: { advanced: true, selector: { text: } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+random_recipe:
+  fields:
+    collection: { example: "Dinners", selector: { text: } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+import_recipe:
+  fields:
+    url: { required: true, example: "https://www.example.com/recipe", selector: { text: { type: url } } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+add_to_meal_plan:
+  fields:
+    recipe: { example: "osso buco", selector: { text: } }
+    title: { example: "Leftovers", selector: { text: } }
+    date: { selector: { date: } }
+    slot: { default: dinner, selector: { select: { options: [breakfast, lunch, dinner, snack], translation_key: slot } } }
+    servings: { selector: { number: { min: 1, max: 100, mode: box } } }
+    note: { selector: { text: } }
+    recipe_id: { advanced: true, selector: { text: } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+set_random_meal:
+  fields:
+    date: { selector: { date: } }
+    slot: { default: dinner, selector: { select: { options: [breakfast, lunch, dinner, snack], translation_key: slot } } }
+    collection: { example: "Dinners", selector: { text: } }
+    servings: { selector: { number: { min: 1, max: 100, mode: box } } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+get_meal_plan:
+  fields:
+    start_date: { selector: { date: } }
+    end_date: { selector: { date: } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+remove_meal:
+  fields:
+    meal_id: { required: true, selector: { text: } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }
+add_recipe_to_list:
+  fields:
+    recipe: { example: "osso buco", selector: { text: } }
+    list: { example: "Groceries", selector: { text: } }
+    servings: { selector: { number: { min: 1, max: 100, mode: box } } }
+    recipe_id: { advanced: true, selector: { text: } }
+    config_entry_id: { advanced: true, selector: { config_entry: { integration: simmer } } }

@@ -4,10 +4,240 @@
       "user": {
         "title": "Connexion à Simmer",
         "description": "Entrez l’adresse de votre serveur Simmer et un jeton d’API. Créez le jeton dans la page Compte de Simmer.",
-        "data": { "url": "Adresse (par exemple http://192.168.1.10:3000)", "token": "Jeton d’API" }
+        "data": {
+          "url": "Adresse (par exemple http://192.168.1.10:3000)",
+          "token": "Jeton d’API"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Simmer a besoin d’un nouveau jeton",
+        "description": "Simmer a refusé le jeton enregistré. Créez-en un nouveau dans la page Compte de Simmer.",
+        "data": {
+          "token": "Jeton d’API"
+        }
       }
     },
-    "error": { "cannot_connect": "Impossible de joindre Simmer à cette adresse.", "invalid_auth": "Simmer a refusé ce jeton." },
-    "abort": { "already_configured": "Ce compte Simmer est déjà connecté." }
+    "error": {
+      "cannot_connect": "Impossible de joindre Simmer à cette adresse.",
+      "invalid_auth": "Simmer a refusé ce jeton."
+    },
+    "abort": {
+      "already_configured": "Ce compte Simmer est déjà connecté.",
+      "reauth_successful": "Le nouveau jeton fonctionne."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Simmer dans la barre latérale",
+        "description": "Affiche Simmer dans Home Assistant, comme une entrée de la barre latérale. Si Home Assistant utilise https, l’adresse doit l’être aussi (par exemple votre adresse https de Simmer), sinon le navigateur la bloquera.",
+        "data": {
+          "show_panel": "Afficher Simmer dans la barre latérale",
+          "panel_url": "Adresse à ouvrir (laisser vide pour utiliser l’adresse de connexion)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "slot": {
+      "options": {
+        "breakfast": "Déjeuner",
+        "lunch": "Dîner",
+        "dinner": "Souper",
+        "snack": "Collation"
+      }
+    }
+  },
+  "services": {
+    "search_recipes": {
+      "name": "Chercher des recettes",
+      "description": "Trouver des recettes par nom, ingrédient ou collection.",
+      "fields": {
+        "query": {
+          "name": "Mots recherchés",
+          "description": "Mots du nom, des ingrédients ou de la collection."
+        },
+        "collection": {
+          "name": "Collection",
+          "description": "Seulement les recettes de cette collection."
+        },
+        "limit": {
+          "name": "Résultats maximum",
+          "description": "Combien de recettes retourner."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "get_recipe": {
+      "name": "Obtenir une recette",
+      "description": "Retourne une recette avec ses ingrédients et ses étapes.",
+      "fields": {
+        "recipe": {
+          "name": "Recette",
+          "description": "Mots du nom de la recette; la meilleure correspondance est utilisée."
+        },
+        "recipe_id": {
+          "name": "Identifiant de la recette",
+          "description": "À utiliser plutôt que le nom si vous connaissez la recette exacte."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "random_recipe": {
+      "name": "Recette au hasard",
+      "description": "Choisit une recette au hasard, au besoin dans une collection.",
+      "fields": {
+        "collection": {
+          "name": "Collection",
+          "description": "Seulement les recettes de cette collection."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "import_recipe": {
+      "name": "Importer une recette",
+      "description": "Ajoute une recette depuis une page web.",
+      "fields": {
+        "url": {
+          "name": "Adresse",
+          "description": "L’adresse web de la page de la recette."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "add_to_meal_plan": {
+      "name": "Ajouter au plan de repas",
+      "description": "Planifie une recette, ou un repas libre, pour un jour.",
+      "fields": {
+        "recipe": {
+          "name": "Recette",
+          "description": "Mots du nom de la recette; la meilleure correspondance est utilisée."
+        },
+        "title": {
+          "name": "Nom",
+          "description": "Un repas sans recette, par exemple « Restes »."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Aujourd’hui par défaut."
+        },
+        "slot": {
+          "name": "Repas",
+          "description": "Quel repas de la journée. Souper par défaut."
+        },
+        "servings": {
+          "name": "Portions",
+          "description": "Combien de portions."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Une note pour le repas."
+        },
+        "recipe_id": {
+          "name": "Identifiant de la recette",
+          "description": "À utiliser plutôt que le nom si vous connaissez la recette exacte."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "set_random_meal": {
+      "name": "Repas au hasard",
+      "description": "Remplit un repas avec une recette au hasard.",
+      "fields": {
+        "date": {
+          "name": "Date",
+          "description": "Aujourd’hui par défaut."
+        },
+        "slot": {
+          "name": "Repas",
+          "description": "Quel repas de la journée. Souper par défaut."
+        },
+        "collection": {
+          "name": "Collection",
+          "description": "Seulement les recettes de cette collection."
+        },
+        "servings": {
+          "name": "Portions",
+          "description": "Combien de portions."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "get_meal_plan": {
+      "name": "Voir le plan de repas",
+      "description": "Retourne les repas planifiés entre deux jours.",
+      "fields": {
+        "start_date": {
+          "name": "Du",
+          "description": "Premier jour. Aujourd’hui par défaut."
+        },
+        "end_date": {
+          "name": "Au",
+          "description": "Dernier jour. Six jours après le premier par défaut."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "remove_meal": {
+      "name": "Retirer un repas",
+      "description": "Retire un repas du plan.",
+      "fields": {
+        "meal_id": {
+          "name": "Identifiant du repas",
+          "description": "L’identifiant donné par « Voir le plan de repas »."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    },
+    "add_recipe_to_list": {
+      "name": "Ajouter une recette à une liste",
+      "description": "Met les ingrédients d’une recette dans une liste, ajustés aux portions voulues.",
+      "fields": {
+        "recipe": {
+          "name": "Recette",
+          "description": "Mots du nom de la recette; la meilleure correspondance est utilisée."
+        },
+        "list": {
+          "name": "Liste",
+          "description": "Le nom de la liste d’épicerie. Votre première liste par défaut."
+        },
+        "servings": {
+          "name": "Portions",
+          "description": "Combien de portions."
+        },
+        "recipe_id": {
+          "name": "Identifiant de la recette",
+          "description": "À utiliser plutôt que le nom si vous connaissez la recette exacte."
+        },
+        "config_entry_id": {
+          "name": "Compte Simmer",
+          "description": "Nécessaire seulement si plus d’un compte Simmer est connecté."
+        }
+      }
+    }
   }
 }

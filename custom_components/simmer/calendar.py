@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import SimmerCoordinator
+from .coordinator import SimmerCoordinator, device_info
 
 # Meals have a slot, not a time. These are the hours they take on the calendar.
 SLOT_TIMES = {
@@ -52,6 +52,7 @@ class SimmerMealCalendar(CoordinatorEntity[SimmerCoordinator], CalendarEntity):
 
     def __init__(self, coordinator: SimmerCoordinator, entry_id: str) -> None:
         super().__init__(coordinator)
+        self._attr_device_info = device_info(coordinator)
         self._attr_unique_id = f"{DOMAIN}_{entry_id}_meal_plan"
 
     @property

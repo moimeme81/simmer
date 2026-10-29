@@ -379,6 +379,20 @@ test('the app is installable: manifest, service worker and icons are served with
   for (const f of ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png']) assert.equal((await fetch(base + '/' + f)).status, 200);
 });
 
+test('Home Assistant helpers: recipe search, random pick and counts in the summary', async () => {
+  await chris.post('/api/recipes', { title: 'Crème brûlée', ingredients: ['4 egg yolks', '2 cups cream'], steps: ['Bake.'], collections: ['Desserts'] });
+  await chris.post('/api/recipes', { title: 'Lentil soup', ingredients: ['1 cup lentils'], steps: ['Simmer.'], collections: ['Soups'] });
+  const hit = (await chris.get('/api/ha/recipes?q=creme%20brulee')).json;
+  assert.equal(hit.total, 1);
+  assert.equal(hit.recipes[0].title, 'Crème brûlée');
+  assert.equal((await chris.get('/api/ha/recipes?q=lentils')).json.recipes[0].title, 'Lentil soup', 'matches ingredients too');
+  assert.equal((await chris.get('/api/ha/recipes?collection=desserts')).json.total, 1);
+  assert.equal((await chris.get('/api/ha/recipes?random=1&limit=1')).json.recipes.length, 1);
+  const sum = (await chris.get('/api/ha/summary')).json;
+  assert.ok(sum.recipes.total >= 2);
+  assert.ok(sum.recipes.collections.some((c) => c.name === 'Desserts' && c.count === 1));
+});
+
 test('the page revalidates and script URLs are fingerprinted so caches cannot serve an old version', async () => {
   const page = await fetch(base + '/');
   assert.match(page.headers.get('cache-control'), /no-cache/);

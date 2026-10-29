@@ -429,7 +429,10 @@ app.post('/api/lists/:id/clear-checked', wrap((req, res) => { listFor(req); res.
 app.post('/api/recipes/:id/to-list', wrap((req, res) => {
   const r = recipeFor(req);
   // The page sends the (possibly scaled) ingredient lines; fall back to the stored ones.
-  const lines = Array.isArray(req.body?.ingredients) ? strArr(req.body.ingredients) : r.ingredients;
+  let lines = Array.isArray(req.body?.ingredients) ? strArr(req.body.ingredients) : r.ingredients;
+  // Scripts and Home Assistant can ask for a number of servings instead of sending scaled lines.
+  const want = +req.body?.servings, have = Scale.parseYield(r.yield);
+  if (!Array.isArray(req.body?.ingredients) && want > 0 && have) lines = lines.map((l) => Scale.scaleLine(l, want / have));
   const listId = req.body?.listId || lists.all().find((l) => acc.canAccess(me(req), l))?.id;
   if (!listId) throw notFound();
   listFor({ params: { id: listId }, user: req.user });
@@ -501,17 +504,36 @@ app.post('/api/meals/to-list', wrap((req, res) => {
 }));
 
 /* ---------- Home Assistant and scripts: one small summary call ---------- */
+const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const haBrief = (r) => ({ id: r.id, title: r.title, image: r.image || null, collections: r.collections || [], yield: r.yield || null, prepMinutes: r.prepMinutes ?? null, cookMinutes: r.cookMinutes ?? null, totalMinutes: r.totalMinutes ?? null, sourceUrl: r.sourceUrl || null });
+/** Search my recipes without sending whole recipes: ?q= words in the title/ingredients, ?collection=, ?random=1, ?limit= (default 25). */
+app.get('/api/ha/recipes', (req, res) => {
+  const words = norm(req.query.q).split(/\s+/).filter(Boolean), col = norm(req.query.collection);
+  let list = store.list().filter((r) => acc.canAccess(me(req), r))
+    .filter((r) => !col || (r.collections || []).some((c) => norm(c) === col))
+    .filter((r) => words.every((w) => norm([r.title, ...(r.ingredients || []), ...(r.collections || [])].join(' ')).includes(w)));
+  const total = list.length;
+  if (req.query.random) list = list.sort(() => Math.random() - 0.5);
+  else list = list.sort((a, b) => norm(a.title).localeCompare(norm(b.title)) - (norm(a.title) === words.join(' ') ? 1 : 0));
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+  res.json({ total, recipes: list.slice(0, limit).map(haBrief) });
+});
+
 app.get('/api/ha/summary', (req, res) => {
   const day = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toLocaleDateString('sv-SE'); };
   const todayStr = today();
   const mine = visibleMeals(req, todayStr, day(7)).map((m) => mealView(req, m));
-  const brief = (m) => ({ id: m.id, date: m.date, slot: m.slot, title: m.title, recipeId: m.recipeId, servings: m.servings });
+  const brief = (m) => ({ id: m.id, date: m.date, slot: m.slot, title: m.title, recipeId: m.recipeId, servings: m.servings, image: m.recipe?.image || null });
+  const visible = store.list().filter((r) => acc.canAccess(me(req), r));
+  const colCount = new Map();
+  for (const r of visible) for (const c of r.collections || []) colCount.set(c, (colCount.get(c) || 0) + 1);
   res.json({
     user: { id: me(req), name: req.user.name },
     lists: lists.all().filter((l) => acc.canAccess(me(req), l)).map((l) => ({ id: l.id, name: l.name, open: l.items.filter((i) => !i.checked).length, total: l.items.length })),
     today: mine.filter((m) => m.date === todayStr).map(brief),
     tomorrow: mine.filter((m) => m.date === day(1)).map(brief),
     upcoming: mine.map(brief),
+    recipes: { total: visible.length, collections: [...colCount].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name)) },
   });
 });
 
